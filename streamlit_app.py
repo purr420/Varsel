@@ -12,7 +12,8 @@ body {
 }
 
 .tablewrap {
-    width: 100%;
+    width: 98%;
+    margin: auto;
     overflow-x: auto;
     border: 1px solid #333;
 }
@@ -31,7 +32,7 @@ thead th {
     position: sticky;
     top: 0;
     background: #000;
-    padding: 4px 8px;
+    padding: 6px 12px;
     z-index: 10;
     border-bottom: 2px solid #444;
     font-size: 0.8rem; /* mindre tekst */
@@ -49,9 +50,17 @@ td:first-child, th:first-child {
 
 /* Rows */
 td {
-    padding: 4px 6px;
+    padding: 8px 12px; /* mer luft */
     border-bottom: 1px solid #333;
     white-space: nowrap;
+}
+
+/* Kolonnebredder */
+tbody td:nth-child(9),
+tbody td:nth-child(10),
+tbody td:nth-child(11),
+tbody td:nth-child(12) {
+    min-width: 80px; /* bredere kolonner */
 }
 
 /* Midt, høyre, venstre for hver kolonne */
@@ -72,7 +81,7 @@ tbody td:nth-child(13), tbody td:nth-child(14), tbody td:nth-child(15), tbody td
 .dayheader {
     font-size: 0.9rem;
     font-weight: normal;
-    padding: 4px 0;
+    padding: 6px 0;
     color: white;
 }
 </style>
@@ -142,4 +151,4 @@ I morgen 15. nov – Første lys 07:55 – Sol opp 08:19 – Sol ned 16:29 – S
 </div>
 """
 
-components.html(html, height=1400, scrolling=True)
+components.html(html, height=1500, scrolling=True)
