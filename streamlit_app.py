@@ -4,54 +4,71 @@ from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Surf & Vær", layout="wide")
 
-# --- Placeholder data ---
-hours = [datetime.now() + timedelta(hours=i) for i in range(24)]
+# --- Nærmeste hele time ---
+now = datetime.now()
+start_hour = now.replace(minute=0, second=0, microsecond=0)
+
+# --- Placeholder data for 24 timer ---
+hours = [start_hour + timedelta(hours=i) for i in range(24)]
 data = []
 
+def grader_til_kompass(grader):
+    retninger = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
+                 "S","SSW","SW","WSW","W","WNW","NW","NNW"]
+    index = round(grader / 22.5) % 16
+    return retninger[index]
+
 for dt in hours:
+    swell_h = round(2 + dt.hour%3)
+    swell_r = grader_til_kompass((dt.hour*15)%360)
+    swell_p = round(6 + dt.hour%5)
+    
+    vindb_h = round(2 + (dt.hour%3)*0.5)
+    vindb_r = grader_til_kompass((dt.hour*20)%360)
+    vindb_p = round(6 + dt.hour%5)
+    
+    vind_yr_s = round(4 + dt.hour%12)
+    vind_yr_r = grader_til_kompass((dt.hour*15)%360)
+    
+    vind_dmi_s = round(4 + dt.hour%12)
+    vind_dmi_r = grader_til_kompass((dt.hour*20)%360)
+    
+    temp = round(8 + dt.hour%5)
+    sky = round(20 + (dt.hour%5)*15)
+    
     data.append({
-        "Tid": dt.strftime("%H:%M"),
-        # Hav
-        "Swell høyde (m)": round(2 + (dt.hour % 3), 1),
-        "Swell retning": f"{(dt.hour*15)%360}°",
-        "Swell periode (s)": 6 + (dt.hour % 5),
-        "Vindbølger høyde (m)": round(2 + (dt.hour%3)*0.5,1),
-        "Vindbølger retning": f"{(dt.hour*20)%360}°",
-        "Vindbølger periode (s)": 6 + (dt.hour%5),
-        "Dominant periode (s)": 8 + (dt.hour%3),
-        "Havtemp (°C)": 12.5,
-        # Vind
-        "Vind retning Yr": f"{(dt.hour*15)%360}°",
-        "Vind styrke Yr (m/s)": 4 + (dt.hour%12),
-        "Vind retning DMI": f"{(dt.hour*20)%360}°",
-        "Vind styrke DMI (m/s)": 4 + (dt.hour%12),
+        # Swell
+        "Swell Høyde (m)": swell_h,
+        "Swell Retning": swell_r,
+        "Swell Periode (s)": swell_p,
+        # Vindbølger
+        "Vindb Høyde (m)": vindb_h,
+        "Vindb Retning": vindb_r,
+        "Vindb Periode (s)": vindb_p,
+        # Vind Yr
+        "Vind Yr Styrke (m/s)": vind_yr_s,
+        "Vind Yr Retning": vind_yr_r,
+        # Vind DMI
+        "Vind DMI Styrke (m/s)": vind_dmi_s,
+        "Vind DMI Retning": vind_dmi_r,
         # Vær
-        "Temp (°C)": 8 + (dt.hour%5),
-        "Skydekke (%)": 20 + (dt.hour%5)*15
+        "Temp (°C)": temp,
+        "Skydekke (%)": sky
     })
 
 df = pd.DataFrame(data)
 
-# --- Midnattsskille / daglig overskrift ---
-df["Dato"] = df["Tid"].apply(lambda x: datetime.strptime(x,"%H:%M").date())
-df["Dag"] = df["Tid"].apply(lambda x: datetime.strptime(x,"%H:%M").strftime("%A %d. %b"))
-
 # --- Layout ---
 st.title("Surf & Vær - Placeholder")
 
-# Sticky nederst
+# --- Sticky footer ---
 footer = """
-**Sol opp/ned:** 08:04/17:14  
-**Surf fra:** 07:35-17:43  
-**Sjøtemperatur:** 12.5 °C 11. nov
+**Sol opp/ned:** 08:04/17:14 | Surf fra 07:35-17:43 | Sjøtemperatur 12 °C 11. nov
 """
-st.markdown(f"<div style='position:fixed; bottom:0; width:100%; background-color:#f0f0f0; padding:10px;'>{footer}</div>", unsafe_allow_html=True)
+st.markdown(f"<div style='position:fixed; bottom:0; width:100%; background-color:black; color:white; padding:10px; font-weight:bold;'>{footer}</div>", unsafe_allow_html=True)
 
-# --- Tabell med scroll ---
+# --- Tabell med scroll, ca 6 timer synlig ---
 st.subheader("Dagens timer")
-st.dataframe(df.style.set_properties(**{'text-align': 'center'}), height=300)
+st.dataframe(df.style.set_properties(**{'text-align': 'center'}).format("{:.0f}"), height=350)
 
-# Alternativ: gruppering etter dag
-# for dag, group in df.groupby("Dag"):
-#     st.subheader(dag)
-#     st.dataframe(group.drop(columns=["Dag","Dato"]).style.set_properties(**{'text-align': 'center'}), height=300)
+# --- Eventuelt kan du dele opp med overskrifter for Swell, Vindbølger osv. ved hjelp av st.columns ---
