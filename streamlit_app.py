@@ -1,81 +1,139 @@
 import streamlit as st
-import pandas as pd
 
 st.set_page_config(layout="wide")
 
 st.markdown("## Varselet")
 
-# --- Placeholder data ---
-data_idag = [
-    ["16", "1,2 m / 9,6 s / VSV", "1,2 m / 6 s / NNV", "9,8 s",
-     "4(7) NNV", "4(7) V", "10°C", "12°C", "0 %", ""],
-    ["17", "1,3 m / 9,3 s / VSV", "1,0 m / 5 s / NNV", "9,7 s",
-     "4(8) NV", "5(10) NNV", "10°C", "12°C", "10 %", ""],
-    ["18", "1,2 m / 9,2 s / SV", "0,9 m / 5 s / NV", "9,6 s",
-     "6(10) V", "11(13) NV", "10°C", "12°C", "40 %", ""],
-]
-
-columns = [
-    "Tid", "Dønning", "Vindbølger", "P.dom.",
-    "yr Vind(kast) m/s", "dmi Vind(kast) m/s",
-    "Land", "Sjø", "Skydekke", "Nedbør"
-]
-
-df_idag = pd.DataFrame(data_idag, columns=columns)
-
-# --- Custom CSS for sticky columns + gridlines ---
-st.markdown("""
+#------- HTML-TABELL --------
+html = """
 <style>
+/* TABLE BASE */
 table {
     width: 100%;
     border-collapse: collapse;
+    background: black;
+    color: white;
     font-size: 0.9rem;
 }
 
+/* HEADER */
 thead th {
     position: sticky;
     top: 0;
-    background: #ffffff;
+    background: black;
+    color: white;
     z-index: 3;
-    border-bottom: 2px solid #ccc;
-}
-
-tbody td, thead th {
     padding: 6px 10px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 2px solid #444;
 }
 
-/* Sticky first column */
-tbody td:first-child,
-thead th:first-child {
+/* CELLER */
+td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #333;
+}
+
+/* STICKY FØRSTE KOLONNE */
+td:first-child, th:first-child {
     position: sticky;
     left: 0;
-    background: #ffffff;
+    background: black;
     z-index: 2;
-    border-right: 2px solid #ccc;
+    border-right: 2px solid #444;
 }
 
-/* Vertical lines after Tid, P.dom., dmi Vind(kast) */
-tbody td:nth-child(1),
-thead th:nth-child(1) {
-    border-right: 2px solid #ccc;
-}
+/* VERTIKALE LINJER */
+td:nth-child(4), th:nth-child(4) { border-right: 2px solid #444; }
+td:nth-child(6), th:nth-child(6) { border-right: 2px solid #444; }
 
-tbody td:nth-child(4),
-thead th:nth-child(4) {
-    border-right: 2px solid #ccc;
+/* DATO/SOL-LINJER */
+.dayrow td {
+    background: #111;
+    font-weight: 600;
+    border-top: 2px solid #555;
+    border-bottom: 2px solid #555;
+    color: white;
 }
-
-tbody td:nth-child(6),
-thead th:nth-child(6) {
-    border-right: 2px solid #ccc;
-}
-
 </style>
-""", unsafe_allow_html=True)
 
+<div style='overflow-x: auto;'>
 
-# Wrapper div so Streamlit doesn't override the sticky formatting
-st.markdown("<div style='overflow-x: auto;'>", unsafe_allow_html=True)
-st.write(df_idag.to_html(escape=False, index=False), unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
+<table>
+<thead>
+<tr>
+    <th>Tid</th>
+    <th>Dønning</th>
+    <th>Vindbølger</th>
+    <th>P.dom.</th>
+    <th>yr Vind(kast) m/s</th>
+    <th>dmi Vind(kast) m/s</th>
+    <th>Land</th>
+    <th>Sjø</th>
+    <th>Skydekke</th>
+    <th>Nedbør</th>
+</tr>
+</thead>
+
+<tbody>
+
+<!-- DAG 1 HEADER -->
+<tr class="dayrow">
+<td colspan="10">
+I dag 14. nov – Første lys 07:52 – Sol opp 08:15 – Sol ned 16:32 – Siste lys 17:01 – Sjøtemp Lindesnes fyr 12,4°C (målt 14. nov)
+</td>
+</tr>
+
+<tr>
+<td>16</td><td>1,2 m / 9,6 s / VSV</td><td>1,2 m / 6 s / NNV</td><td>9,8 s</td><td>4(7) NNV</td><td>4(7) V</td><td>10°C</td><td>12°C</td><td>0 %</td><td></td>
+</tr>
+
+<tr>
+<td>17</td><td>1,3 m / 9,3 s / VSV</td><td>1,0 m / 5 s / NNV</td><td>9,7 s</td><td>4(8) NV</td><td>5(10) NNV</td><td>10°C</td><td>12°C</td><td>10 %</td><td></td>
+</tr>
+
+<tr>
+<td>18</td><td>1,2 m / 9,2 s / SV</td><td>0,9 m / 5 s / NV</td><td>9,6 s</td><td>6(10) V</td><td>11(13) NV</td><td>10°C</td><td>12°C</td><td>40 %</td><td></td>
+</tr>
+
+<!-- DAG 2 HEADER -->
+<tr class="dayrow">
+<td colspan="10">
+I morgen 15. nov – Første lys 07:55 – Sol opp 08:19 – Sol ned 16:29 – Siste lys 16:55
+</td>
+</tr>
+
+<tr>
+<td>06</td><td>1,2 m / 9,6 s / VSV</td><td>1,2 m / 6 s / NNV</td><td>9,8 s</td><td>4(7) NNV</td><td>4(7) V</td><td>7°C</td><td>12°C</td><td>100 %</td><td>0,9 mm</td>
+</tr>
+
+<tr>
+<td>07</td><td>1,3 m / 9,3 s / VSV</td><td>1,0 m / 5 s / NNV</td><td>9,7 s</td><td>4(8) NV</td><td>5(10) NNV</td><td>7°C</td><td>12°C</td><td>100 %</td><td>1,1 mm</td>
+</tr>
+
+<tr>
+<td>08</td><td>1,2 m / 9,2 s / SV</td><td>0,9 m / 5 s / NV</td><td>9,6 s</td><td>4(7) NNV</td><td>4(7) V</td><td>8°C</td><td>12°C</td><td>100 %</td><td>0,3 mm</td>
+</tr>
+
+<tr>
+<td>09</td><td>1,2 m / 9,6 s / VSV</td><td>1,2 m / 6 s / NNV</td><td>9,8 s</td><td>4(8) NV</td><td>5(10) NNV</td><td>9°C</td><td>12°C</td><td>90 %</td><td></td>
+</tr>
+
+<tr>
+<td>10</td><td>1,2 m / 9,6 s / VSV</td><td>1,2 m / 6 s / NNV</td><td>9,8 s</td><td>4(7) NNV</td><td>4(7) V</td><td>10°C</td><td>12°C</td><td>70 %</td><td></td>
+</tr>
+
+<tr>
+<td>11</td><td>1,3 m / 9,3 s / VSV</td><td>1,0 m / 5 s / NNV</td><td>9,7 s</td><td>4(8) NV</td><td>5(10) NNV</td><td>11°C</td><td>12°C</td><td>100 %</td><td>0,5 mm</td>
+</tr>
+
+<tr>
+<td>12</td><td>1,2 m / 9,2 s / SV</td><td>0,9 m / 5 s / NV</td><td>9,6 s</td><td>6(10) V</td><td>11(13) NV</td><td>11°C</td><td>12°C</td><td>100 %</td><td>0,9 mm</td>
+</tr>
+
+</tbody>
+</table>
+
+</div>
+"""
+
+st.markdown(html, unsafe_allow_html=True)
