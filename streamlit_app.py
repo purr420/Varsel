@@ -7,15 +7,17 @@ body {
     background: black;
     color: white;
     font-family: sans-serif;
+    margin:0;
+    padding:0;
 }
 
 .tablewrap {
-    max-height: 600px;
-    overflow-y: auto;
+    width: 100%;
     overflow-x: auto;
     border: 1px solid #333;
 }
 
+/* TABLE */
 table {
     width: 100%;
     border-collapse: collapse;
@@ -29,7 +31,7 @@ thead th {
     position: sticky;
     top: 0;
     background: #000;
-    padding: 8px;
+    padding: 6px 10px;
     z-index: 10;
     border-bottom: 2px solid #444;
 }
@@ -43,17 +45,18 @@ td:first-child, th:first-child {
     border-right: 2px solid #444;
 }
 
+/* Rows */
 td {
     padding: 6px 10px;
     border-bottom: 1px solid #333;
     text-align: center;
+    white-space: nowrap;
 }
 
 .dayheader {
-    font-size: 1.1rem;
-    font-weight: bold;
-    padding: 10px 0;
-    margin-top: 20px;
+    font-size: 0.9rem;
+    font-weight: normal;
+    padding: 4px 0;
     color: white;
 }
 </style>
@@ -67,16 +70,24 @@ I dag 14. nov – Første lys 07:52 – Sol opp 08:15 – Sol ned 16:32 – Sist
 <table>
 <thead>
 <tr>
-    <th>Tid</th>
-    <th>Dønning m</th><th>Dønning s</th><th>Dønning retning</th>
-    <th>Vindbølger m</th><th>Vindbølger s</th><th>Vindbølger retning</th>
-    <th>P.dom.</th>
-    <th>yr Vind (m/s)</th><th>yr Retning</th>
-    <th>dmi Vind (m/s)</th><th>dmi Retning</th>
-    <th>Land</th><th>Sjø</th><th>Skydekke</th><th>Nedbør</th>
+    <th rowspan="2">Tid</th>
+    <th colspan="3">Dønning</th>
+    <th colspan="3">Vindbølger</th>
+    <th rowspan="2">P.dom.</th>
+    <th colspan="2">yr Vind(kast) m/s</th>
+    <th colspan="2">dmi Vind(kast) m/s</th>
+    <th rowspan="2">Land</th>
+    <th rowspan="2">Sjø</th>
+    <th rowspan="2">Skydekke</th>
+    <th rowspan="2">Nedbør</th>
+</tr>
+<tr>
+    <th>m</th><th>s</th><th>retning</th>
+    <th>m</th><th>s</th><th>retning</th>
+    <th>Vind</th><th>Kast</th>
+    <th>Vind</th><th>Kast</th>
 </tr>
 </thead>
-
 <tbody>
 <tr><td>16</td><td>1,2 m</td><td>9,6 s</td><td>VSV</td><td>1,2 m</td><td>6 s</td><td>NNV</td><td>9,8 s</td><td>4(7)</td><td>NNV</td><td>4(7)</td><td>V</td><td>10°C</td><td>12°C</td><td>0 %</td><td></td></tr>
 <tr><td>17</td><td>1,3 m</td><td>9,3 s</td><td>VSV</td><td>1,0 m</td><td>5 s</td><td>NNV</td><td>9,7 s</td><td>4(8)</td><td>NV</td><td>5(10)</td><td>NNV</td><td>10°C</td><td>12°C</td><td>10 %</td><td></td></tr>
@@ -94,16 +105,24 @@ I morgen 15. nov – Første lys 07:55 – Sol opp 08:19 – Sol ned 16:29 – S
 <table>
 <thead>
 <tr>
-    <th>Tid</th>
-    <th>Dønning m</th><th>Dønning s</th><th>Dønning retning</th>
-    <th>Vindbølger m</th><th>Vindbølger s</th><th>Vindbølger retning</th>
-    <th>P.dom.</th>
-    <th>yr Vind (m/s)</th><th>yr Retning</th>
-    <th>dmi Vind (m/s)</th><th>dmi Retning</th>
-    <th>Land</th><th>Sjø</th><th>Skydekke</th><th>Nedbør</th>
+    <th rowspan="2">Tid</th>
+    <th colspan="3">Dønning</th>
+    <th colspan="3">Vindbølger</th>
+    <th rowspan="2">P.dom.</th>
+    <th colspan="2">yr Vind(kast) m/s</th>
+    <th colspan="2">dmi Vind(kast) m/s</th>
+    <th rowspan="2">Land</th>
+    <th rowspan="2">Sjø</th>
+    <th rowspan="2">Skydekke</th>
+    <th rowspan="2">Nedbør</th>
+</tr>
+<tr>
+    <th>m</th><th>s</th><th>retning</th>
+    <th>m</th><th>s</th><th>retning</th>
+    <th>Vind</th><th>Kast</th>
+    <th>Vind</th><th>Kast</th>
 </tr>
 </thead>
-
 <tbody>
 <tr><td>06</td><td>1,2 m</td><td>9,6 s</td><td>VSV</td><td>1,2 m</td><td>6 s</td><td>NNV</td><td>9,8 s</td><td>4(7)</td><td>NNV</td><td>4(7)</td><td>V</td><td>7°C</td><td>12°C</td><td>100 %</td><td>0,9 mm</td></tr>
 <tr><td>07</td><td>1,3 m</td><td>9,3 s</td><td>VSV</td><td>1,0 m</td><td>5 s</td><td>NNV</td><td>9,7 s</td><td>4(8)</td><td>NV</td><td>5(10)</td><td>NNV</td><td>7°C</td><td>12°C</td><td>100 %</td><td>1,1 mm</td></tr>
