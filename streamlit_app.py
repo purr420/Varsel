@@ -27,7 +27,7 @@ table {
     background: black;
     color: white;
     text-align: center;
-    table-layout: fixed;
+    table-layout: auto;
 }
 
 /* Sticky header */
@@ -49,29 +49,6 @@ td {
     white-space: nowrap;
 }
 
-/* Kolonnebredder */
-td:nth-child(9),
-td:nth-child(10),
-td:nth-child(11),
-td:nth-child(12) {
-    min-width: 60px; 
-}
-
-/* Midt, høyre, venstre for hver kolonne */
-td:nth-child(1) { text-align: center; }
-td:nth-child(2) { text-align: right; }
-td:nth-child(3) { text-align: center; }
-td:nth-child(4) { text-align: left; }
-td:nth-child(5) { text-align: right; }
-td:nth-child(6) { text-align: center; }
-td:nth-child(7) { text-align: left; }
-td:nth-child(8) { text-align: center; }
-td:nth-child(9) { text-align: right; }
-td:nth-child(10) { text-align: left; }
-td:nth-child(11) { text-align: right; }
-td:nth-child(12) { text-align: left; }
-td:nth-child(13), td:nth-child(14), td:nth-child(15), td:nth-child(16) { text-align: center; }
-
 /* Dag header */
 .dayheader {
     font-size: 0.9rem;
@@ -82,7 +59,6 @@ td:nth-child(13), td:nth-child(14), td:nth-child(15), td:nth-child(16) { text-al
 }
 </style>
 
-<!-- ===================== I DAG ===================== -->
 <div class="dayheader">
 I dag 14. nov – Første lys 07:52 – Sol opp 08:15 – Sol ned 16:32 – Siste lys 17:01 – Sjøtemp Lindesnes fyr 12,4°C
 </div>
@@ -91,19 +67,24 @@ I dag 14. nov – Første lys 07:52 – Sol opp 08:15 – Sol ned 16:32 – Sist
 <table>
 <thead>
 <tr>
-    <th rowspan="2">Tid</th>
-    <th colspan="3">Dønning</th>
-    <th colspan="3">Vindbølger</th>
-    <th rowspan="2">P.dom.</th>
-    <th colspan="2">yr Vind(kast) m/s</th>
-    <th colspan="2">dmi Vind(kast) m/s</th>
-    <th rowspan="2">Land</th>
-    <th rowspan="2">Sjø</th>
-    <th rowspan="2">Skydekke</th>
-    <th rowspan="2">Nedbør</th>
+    <th>Tid</th>
+    <th>Dønning</th>
+    <th>Dønning s</th>
+    <th>Dønning retning</th>
+    <th>Vindbølger m</th>
+    <th>Vindbølger s</th>
+    <th>Vindbølger retning</th>
+    <th>P.dom.</th>
+    <th>yr Vind</th>
+    <th>yr Retning</th>
+    <th>dmi Vind</th>
+    <th>dmi Retning</th>
+    <th>Land</th>
+    <th>Sjø</th>
+    <th>Skydekke</th>
+    <th>Nedbør</th>
 </tr>
 </thead>
-
 <tbody>
 <tr><td>16</td><td>1,2 m</td><td>9,6 s</td><td>VSV</td><td>1,2 m</td><td>6 s</td><td>NNV</td><td>9,8 s</td><td>4(7)</td><td>NNV</td><td>4(7)</td><td>V</td><td>10°C</td><td>12°C</td><td>0 %</td><td></td></tr>
 <tr><td>17</td><td>1,3 m</td><td>9,3 s</td><td>VSV</td><td>1,0 m</td><td>5 s</td><td>NNV</td><td>9,7 s</td><td>4(8)</td><td>NV</td><td>5(10)</td><td>NNV</td><td>10°C</td><td>12°C</td><td>10 %</td><td></td></tr>
@@ -112,7 +93,6 @@ I dag 14. nov – Første lys 07:52 – Sol opp 08:15 – Sol ned 16:32 – Sist
 </table>
 </div>
 
-<!-- ===================== I MORGEN ===================== -->
 <div class="dayheader">
 I morgen 15. nov – Første lys 07:55 – Sol opp 08:19 – Sol ned 16:29 – Siste lys 16:55
 </div>
@@ -121,19 +101,24 @@ I morgen 15. nov – Første lys 07:55 – Sol opp 08:19 – Sol ned 16:29 – S
 <table>
 <thead>
 <tr>
-    <th rowspan="2">Tid</th>
-    <th colspan="3">Dønning</th>
-    <th colspan="3">Vindbølger</th>
-    <th rowspan="2">P.dom.</th>
-    <th colspan="2">yr Vind(kast) m/s</th>
-    <th colspan="2">dmi Vind(kast) m/s</th>
-    <th rowspan="2">Land</th>
-    <th rowspan="2">Sjø</th>
-    <th rowspan="2">Skydekke</th>
-    <th rowspan="2">Nedbør</th>
+    <th>Tid</th>
+    <th>Dønning</th>
+    <th>Dønning s</th>
+    <th>Dønning retning</th>
+    <th>Vindbølger m</th>
+    <th>Vindbølger s</th>
+    <th>Vindbølger retning</th>
+    <th>P.dom.</th>
+    <th>yr Vind</th>
+    <th>yr Retning</th>
+    <th>dmi Vind</th>
+    <th>dmi Retning</th>
+    <th>Land</th>
+    <th>Sjø</th>
+    <th>Skydekke</th>
+    <th>Nedbør</th>
 </tr>
 </thead>
-
 <tbody>
 <tr><td>06</td><td>1,2 m</td><td>9,6 s</td><td>VSV</td><td>1,2 m</td><td>6 s</td><td>NNV</td><td>9,8 s</td><td>4(7)</td><td>NNV</td><td>4(7)</td><td>V</td><td>7°C</td><td>12°C</td><td>100 %</td><td>0,9 mm</td></tr>
 <tr><td>07</td><td>1,3 m</td><td>9,3 s</td><td>VSV</td><td>1,0 m</td><td>5 s</td><td>NNV</td><td>9,7 s</td><td>4(8)</td><td>NV</td><td>5(10)</td><td>NNV</td><td>7°C</td><td>12°C</td><td>100 %</td><td>1,1 mm</td></tr>
