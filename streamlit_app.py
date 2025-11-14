@@ -8,15 +8,16 @@ st.set_page_config(page_title="Surf & Vær", layout="wide")
 now = datetime.now()
 start_hour = now.replace(minute=0, second=0, microsecond=0)
 
-# --- Placeholder data for 24 timer ---
-hours = [start_hour + timedelta(hours=i) for i in range(24)]
-data = []
-
+# --- Funksjon for kompassretning ---
 def grader_til_kompass(grader):
     retninger = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
                  "S","SSW","SW","WSW","W","WNW","NW","NNW"]
     index = round(grader / 22.5) % 16
     return retninger[index]
+
+# --- Placeholder data for 24 timer ---
+hours = [start_hour + timedelta(hours=i) for i in range(24)]
+data = []
 
 for dt in hours:
     swell_h = round(2 + dt.hour%3)
@@ -42,7 +43,7 @@ for dt in hours:
         "Swell Retning": swell_r,
         "Swell Periode (s)": swell_p,
         # Vindbølger
-        "Vindb Høyde (m)": vindb_h,
+        "Vindb Høyde (m)": round(vindb_h),
         "Vindb Retning": vindb_r,
         "Vindb Periode (s)": vindb_p,
         # Vind Yr
@@ -65,10 +66,24 @@ st.title("Surf & Vær - Placeholder")
 footer = """
 **Sol opp/ned:** 08:04/17:14 | Surf fra 07:35-17:43 | Sjøtemperatur 12 °C 11. nov
 """
-st.markdown(f"<div style='position:fixed; bottom:0; width:100%; background-color:black; color:white; padding:10px; font-weight:bold;'>{footer}</div>", unsafe_allow_html=True)
+st.markdown(
+    f"<div style='position:fixed; bottom:0; width:100%; background-color:black; color:white; padding:10px; font-weight:bold; z-index:999;'>{footer}</div>", 
+    unsafe_allow_html=True
+)
 
-# --- Tabell med scroll, ca 6 timer synlig ---
+# --- Kolonnegrupper (etasjer) ---
 st.subheader("Dagens timer")
-st.dataframe(df.style.set_properties(**{'text-align': 'center'}).format("{:.0f}"), height=350)
+st.markdown("**Swell**")
+st.dataframe(df[["Swell Høyde (m)", "Swell Retning", "Swell Periode (s)"]].style.set_properties(**{'text-align': 'center'}), height=150)
 
-# --- Eventuelt kan du dele opp med overskrifter for Swell, Vindbølger osv. ved hjelp av st.columns ---
+st.markdown("**Vindbølger**")
+st.dataframe(df[["Vindb Høyde (m)", "Vindb Retning", "Vindb Periode (s)"]].style.set_properties(**{'text-align': 'center'}), height=150)
+
+st.markdown("**Vind Yr**")
+st.dataframe(df[["Vind Yr Styrke (m/s)", "Vind Yr Retning"]].style.set_properties(**{'text-align': 'center'}), height=100)
+
+st.markdown("**Vind DMI**")
+st.dataframe(df[["Vind DMI Styrke (m/s)", "Vind DMI Retning"]].style.set_properties(**{'text-align': 'center'}), height=100)
+
+st.markdown("**Vær**")
+st.dataframe(df[["Temp (°C)", "Skydekke (%)"]].style.set_properties(**{'text-align': 'center'}), height=100)
