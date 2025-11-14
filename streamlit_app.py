@@ -12,8 +12,8 @@ body {
 }
 
 .tablewrap {
-    width: 98%;
-    margin: 20px auto 40px auto; /* mer luft mellom tabeller */
+    width: 99%; /* nesten hele bredden */
+    margin: 20px auto 40px auto;
     overflow-x: auto;
     border: 1px solid #333;
 }
@@ -32,7 +32,7 @@ thead th {
     position: sticky;
     top: 0;
     background: #000;
-    padding: 6px 12px;
+    padding: 8px 12px; /* litt mer luft */
     z-index: 10;
     border-bottom: 2px solid #444;
     font-size: 0.8rem; 
@@ -50,7 +50,7 @@ td:first-child, th:first-child {
 
 /* Rows */
 td {
-    padding: 6px 10px; /* mellomstore mellomrom */
+    padding: 8px 12px; /* konsistent luft */
     border-bottom: 1px solid #333;
     white-space: nowrap;
 }
@@ -60,7 +60,7 @@ tbody td:nth-child(9),
 tbody td:nth-child(10),
 tbody td:nth-child(11),
 tbody td:nth-child(12) {
-    min-width: 65px; /* midt mellom tidligere forslag og original */
+    min-width: 50px; /* samme som andre kolonner */
 }
 
 /* Midt, høyre, venstre for hver kolonne */
@@ -82,7 +82,7 @@ tbody td:nth-child(13), tbody td:nth-child(14), tbody td:nth-child(15), tbody td
 .dayheader {
     font-size: 0.9rem;
     font-weight: normal;
-    padding: 12px 0; /* mer luft */
+    padding: 16px 0; /* mer luft over/below */
     margin-bottom: 8px;
     color: white;
 }
