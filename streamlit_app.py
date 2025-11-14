@@ -31,9 +31,11 @@ thead th {
     position: sticky;
     top: 0;
     background: #000;
-    padding: 6px 10px;
+    padding: 4px 8px;
     z-index: 10;
     border-bottom: 2px solid #444;
+    font-size: 0.8rem; /* mindre tekst */
+    text-align: center;
 }
 
 /* Sticky first column */
@@ -47,11 +49,25 @@ td:first-child, th:first-child {
 
 /* Rows */
 td {
-    padding: 6px 10px;
+    padding: 4px 6px;
     border-bottom: 1px solid #333;
-    text-align: center;
     white-space: nowrap;
 }
+
+/* Midt, høyre, venstre for hver kolonne */
+tbody td:nth-child(1) { text-align: center; }
+tbody td:nth-child(2) { text-align: right; }
+tbody td:nth-child(3) { text-align: center; }
+tbody td:nth-child(4) { text-align: left; }
+tbody td:nth-child(5) { text-align: right; }
+tbody td:nth-child(6) { text-align: center; }
+tbody td:nth-child(7) { text-align: left; }
+tbody td:nth-child(8) { text-align: center; }
+tbody td:nth-child(9) { text-align: right; }
+tbody td:nth-child(10) { text-align: left; }
+tbody td:nth-child(11) { text-align: right; }
+tbody td:nth-child(12) { text-align: left; }
+tbody td:nth-child(13), tbody td:nth-child(14), tbody td:nth-child(15), tbody td:nth-child(16) { text-align: center; }
 
 .dayheader {
     font-size: 0.9rem;
