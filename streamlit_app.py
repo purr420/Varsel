@@ -1,62 +1,81 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Surf & Vær", layout="wide")
+st.set_page_config(layout="wide")
 
-# --- Nærmeste hele time ---
-now = datetime.now()
-start_hour = now.replace(minute=0, second=0, microsecond=0)
+st.markdown("## Varselet")
 
-def grader_til_kompass(grader):
-    retninger = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
-                 "S","SSW","SW","WSW","W","WNW","NW","NNW"]
-    index = round(grader / 22.5) % 16
-    return retninger[index]
-
-# --- Placeholder data for 24 timer ---
-hours = [start_hour + timedelta(hours=i) for i in range(24)]
-rows = []
-
-for dt in hours:
-    rows.append([
-        round(2 + dt.hour%3), grader_til_kompass((dt.hour*15)%360), round(6 + dt.hour%5),      # Swell
-        round(2 + (dt.hour%3)*0.5), grader_til_kompass((dt.hour*20)%360), round(6 + dt.hour%5), # Vindbølger
-        round(4 + dt.hour%12), grader_til_kompass((dt.hour*15)%360),                           # Vind Yr
-        round(4 + dt.hour%12), grader_til_kompass((dt.hour*20)%360),                           # Vind DMI
-        round(8 + dt.hour%5), round(20 + (dt.hour%5)*15)                                       # Vær
-    ])
-
-# --- MultiIndex kolonner ---
-arrays = [
-    ["Swell", "Swell", "Swell", 
-     "Vindbølger", "Vindbølger", "Vindbølger",
-     "Vind Yr", "Vind Yr",
-     "Vind DMI", "Vind DMI",
-     "Vær", "Vær"],
-    ["Høyde (m)", "Retning", "Periode (s)",
-     "Høyde (m)", "Retning", "Periode (s)",
-     "Styrke (m/s)", "Retning",
-     "Styrke (m/s)", "Retning",
-     "Temp (°C)", "Skydekke (%)"]
+# --- Placeholder data ---
+data_idag = [
+    ["16", "1,2 m / 9,6 s / VSV", "1,2 m / 6 s / NNV", "9,8 s",
+     "4(7) NNV", "4(7) V", "10°C", "12°C", "0 %", ""],
+    ["17", "1,3 m / 9,3 s / VSV", "1,0 m / 5 s / NNV", "9,7 s",
+     "4(8) NV", "5(10) NNV", "10°C", "12°C", "10 %", ""],
+    ["18", "1,2 m / 9,2 s / SV", "0,9 m / 5 s / NV", "9,6 s",
+     "6(10) V", "11(13) NV", "10°C", "12°C", "40 %", ""],
 ]
 
-columns = pd.MultiIndex.from_arrays(arrays)
+columns = [
+    "Tid", "Dønning", "Vindbølger", "P.dom.",
+    "yr Vind(kast) m/s", "dmi Vind(kast) m/s",
+    "Land", "Sjø", "Skydekke", "Nedbør"
+]
 
-df = pd.DataFrame(rows, columns=columns)
+df_idag = pd.DataFrame(data_idag, columns=columns)
 
-# --- Layout ---
-st.title("Surf & Vær - Placeholder")
+# --- Custom CSS for sticky columns + gridlines ---
+st.markdown("""
+<style>
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
 
-# --- Sticky footer ---
-footer = """
-**Sol opp/ned:** 08:04/17:14 | Surf fra 07:35-17:43 | Sjøtemperatur 12 °C 11. nov
-"""
-st.markdown(
-    f"<div style='position:fixed; bottom:0; width:100%; background-color:black; color:white; padding:10px; font-weight:bold; z-index:999;'>{footer}</div>",
-    unsafe_allow_html=True
-)
+thead th {
+    position: sticky;
+    top: 0;
+    background: #ffffff;
+    z-index: 3;
+    border-bottom: 2px solid #ccc;
+}
 
-# --- Tabell med scroll ---
-st.subheader("Dagens timer")
-st.dataframe(df.style.set_properties(**{'text-align': 'center'}), height=400)
+tbody td, thead th {
+    padding: 6px 10px;
+    border-bottom: 1px solid #eee;
+}
+
+/* Sticky first column */
+tbody td:first-child,
+thead th:first-child {
+    position: sticky;
+    left: 0;
+    background: #ffffff;
+    z-index: 2;
+    border-right: 2px solid #ccc;
+}
+
+/* Vertical lines after Tid, P.dom., dmi Vind(kast) */
+tbody td:nth-child(1),
+thead th:nth-child(1) {
+    border-right: 2px solid #ccc;
+}
+
+tbody td:nth-child(4),
+thead th:nth-child(4) {
+    border-right: 2px solid #ccc;
+}
+
+tbody td:nth-child(6),
+thead th:nth-child(6) {
+    border-right: 2px solid #ccc;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+# Wrapper div so Streamlit doesn't override the sticky formatting
+st.markdown("<div style='overflow-x: auto;'>", unsafe_allow_html=True)
+st.write(df_idag.to_html(escape=False, index=False), unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
