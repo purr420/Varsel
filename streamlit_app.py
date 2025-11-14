@@ -81,12 +81,6 @@ I dag 14. nov – Første lys 07:52 – Sol opp 08:15 – Sol ned 16:32 – Sist
     <th rowspan="2">Skydekke</th>
     <th rowspan="2">Nedbør</th>
 </tr>
-<tr>
-    <th>m</th><th>s</th><th>retning</th>
-    <th>m</th><th>s</th><th>retning</th>
-    <th>Vind</th><th>Kast</th>
-    <th>Vind</th><th>Kast</th>
-</tr>
 </thead>
 
 <tbody>
@@ -116,12 +110,6 @@ I morgen 15. nov – Første lys 07:55 – Sol opp 08:19 – Sol ned 16:29 – S
     <th rowspan="2">Sjø</th>
     <th rowspan="2">Skydekke</th>
     <th rowspan="2">Nedbør</th>
-</tr>
-<tr>
-    <th>m</th><th>s</th><th>retning</th>
-    <th>m</th><th>s</th><th>retning</th>
-    <th>Vind</th><th>Kast</th>
-    <th>Vind</th><th>Kast</th>
 </tr>
 </thead>
 
