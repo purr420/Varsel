@@ -12,9 +12,10 @@ body {
 }
 
 .tablewrap {
-    width: 99%;
+    width: 98%;
     margin: 20px auto 40px auto;
     overflow-x: auto;
+    overflow-y: auto;
     max-height: 700px;
     border: 1px solid #333;
 }
@@ -39,15 +40,6 @@ thead th {
     border-bottom: 2px solid #444;
     font-size: 0.8rem;
     text-align: center;
-}
-
-/* Sticky first column */
-td:first-child, th:first-child {
-    position: sticky;
-    left: 0;
-    background: #000;
-    z-index: 20;
-    border-right: 2px solid #444;
 }
 
 /* Rows */
