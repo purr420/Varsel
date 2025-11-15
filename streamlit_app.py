@@ -1,171 +1,143 @@
 import streamlit as st
-import streamlit.components.v1 as components
+import pandas as pd
+from datetime import datetime, timedelta
+import pytz
 
-html = """
+st.title("Custom HTML Table with Time-Based Rows")
+
+# Get current Oslo time (UTC+1 in winter, UTC+2 in summer)
+oslo_tz = pytz.timezone('Europe/Oslo')
+current_time = datetime.now(oslo_tz)
+current_hour = current_time.hour
+
+# Start time: 2 hours before current hour
+start_hour = (current_hour - 2) % 24
+
+# Create header row with letters a-p (16 columns)
+columns = [chr(ord('a') + i) for i in range(16)]
+
+# Create time-based rows (24 hours starting from 2 hours before current)
+data = []
+times = []
+
+for i in range(24):
+    hour = (start_hour + i) % 24
+    time_str = f"{hour:02d}"
+    times.append(time_str)
+    
+    row = [time_str]  # First column: time
+    row.extend(["-"] * 15)  # Rest of columns filled with dashes
+    data.append(row)
+
+# Add tomorrow's date row
+tomorrow = current_time + timedelta(days=1)
+tomorrow_str = tomorrow.strftime("%A %d. %b")  # e.g., "Monday 16. nov"
+
+# Add the tomorrow row (will be handled specially in HTML)
+tomorrow_row_data = [tomorrow_str] + ["-"] * 15
+data.append(tomorrow_row_data)
+
+# Create custom HTML table with sticky functionality
+html_table = f"""
 <style>
-body {
-    background: black;
-    color: white;
-    font-family: sans-serif;
-    margin:0;
-    padding:0;
-}
+.sticky-table-container {{
+    max-height: 600px;
+    overflow: auto;
+    border: 1px solid #ddd;
+    margin: 10px 0;
+}}
 
-.tablewrap {
-    width: 99%; /* nesten hele bredden */
-    margin: 20px auto 40px auto;
-    overflow-x: auto;
-    border: 1px solid #333;
-    max-height: 80vh; /* Add max height to enable vertical scrolling */
-    overflow-y: auto;
-}
-
-/* TABLE */
-table {
+.sticky-table {{
     width: 100%;
     border-collapse: collapse;
-    background: black;
-    color: white;
+    background: white;
+}}
+
+.sticky-table th,
+.sticky-table td {{
+    border: 1px solid #ddd;
+    padding: 8px;
     text-align: center;
-}
+    min-width: 60px;
+}}
 
 /* Sticky header */
-thead th {
+.sticky-table thead th {{
     position: sticky;
     top: 0;
-    background: #000;
-    padding: 8px 12px; /* litt mer luft */
+    background: #f8f9fa;
     z-index: 10;
-    border-bottom: 2px solid #444;
-    font-size: 0.8rem; 
-    text-align: center;
-}
+    font-weight: bold;
+}}
 
 /* Sticky first column */
-td:first-child, th:first-child {
+.sticky-table td:first-child,
+.sticky-table th:first-child {{
     position: sticky;
     left: 0;
-    background: #000;
+    background: #f8f9fa;
     z-index: 20;
-    border-right: 2px solid #444;
-}
-
-/* Special styling for section headers (like "I morgen 15. nov") */
-.section-row {
-    position: sticky;
-    left: 0;
-    background: #222 !important;
     font-weight: bold;
-    z-index: 15;
-    border-top: 2px solid #666;
-    border-bottom: 2px solid #666;
-}
+}}
 
-.section-row td {
-    background: #222 !important;
+/* Corner cell (header + first column) */
+.sticky-table thead th:first-child {{
+    z-index: 30;
+    background: #e9ecef;
+}}
+
+/* Tomorrow row styling */
+.tomorrow-row {{
+    background: #e3f2fd !important;
     font-weight: bold;
-    padding: 12px;
+}}
+
+.tomorrow-row td {{
+    background: #e3f2fd !important;
     text-align: left;
-}
-
-/* Rows */
-td {
-    padding: 8px 12px; /* konsistent luft */
-    border-bottom: 1px solid #333;
-    white-space: nowrap;
-}
-
-/* Kolonnebredder */
-tbody td:nth-child(9),
-tbody td:nth-child(10),
-tbody td:nth-child(11),
-tbody td:nth-child(12) {
-    min-width: 50px; /* samme som andre kolonner */
-}
-
-/* Midt, høyre, venstre for hver kolonne */
-tbody td:nth-child(1) { text-align: center; }
-tbody td:nth-child(2) { text-align: right; }
-tbody td:nth-child(3) { text-align: center; }
-tbody td:nth-child(4) { text-align: left; }
-tbody td:nth-child(5) { text-align: right; }
-tbody td:nth-child(6) { text-align: center; }
-tbody td:nth-child(7) { text-align: left; }
-tbody td:nth-child(8) { text-align: center; }
-tbody td:nth-child(9) { text-align: right; }
-tbody td:nth-child(10) { text-align: left; }
-tbody td:nth-child(11) { text-align: right; }
-tbody td:nth-child(12) { text-align: left; }
-tbody td:nth-child(13), tbody td:nth-child(14), tbody td:nth-child(15), tbody td:nth-child(16) { text-align: center; }
-
-/* Dag header */
-.dayheader {
-    font-size: 0.9rem;
-    font-weight: normal;
-    padding: 16px 0; /* mer luft over/below */
-    margin-bottom: 8px;
-    color: white;
-}
+    padding: 12px;
+}}
 </style>
 
-<!-- ===================== I DAG ===================== -->
-<div class="dayheader">
-I dag 14. nov – Første lys 07:52 – Sol opp 08:15 – Sol ned 16:32 – Siste lys 17:01 – Sjøtemp Lindesnes fyr 12,4°C
-</div>
-
-<div class="tablewrap">
-<table>
+<div class="sticky-table-container">
+<table class="sticky-table">
 <thead>
 <tr>
-    <th rowspan="2">Tid</th>
-    <th colspan="3">Dønning</th>
-    <th colspan="3">Vindbølger</th>
-    <th rowspan="2">P.dom.</th>
-    <th colspan="2">yr Vind(kast) m/s</th>
-    <th colspan="2">dmi Vind(kast) m/s</th>
-    <th rowspan="2">Land</th>
-    <th rowspan="2">Sjø</th>
-    <th rowspan="2">Skydekke</th>
-    <th rowspan="2">Nedbør</th>
-</tr>
-<tr>
-    <th>Høyde</th>
-    <th>Periode</th>
-    <th>Retning</th>
-    <th>Høyde</th>
-    <th>Periode</th>
-    <th>Retning</th>
-    <th>Styrke</th>
-    <th>Retning</th>
-    <th>Styrke</th>
-    <th>Retning</th>
-    <th></th>
-    <th></th>
-    <th></th>
-    <th></th>
+"""
+
+# Add header row
+for col in columns:
+    html_table += f"<th>{col}</th>"
+
+html_table += """
 </tr>
 </thead>
-
 <tbody>
-<tr><td>16</td><td>1,2 m</td><td>9,6 s</td><td>VSV</td><td>1,2 m</td><td>6 s</td><td>NNV</td><td>9,8 s</td><td>4(7)</td><td>NNV</td><td>4(7)</td><td>V</td><td>10°C</td><td>12°C</td><td>0 %</td><td></td></tr>
-<tr><td>17</td><td>1,3 m</td><td>9,3 s</td><td>VSV</td><td>1,0 m</td><td>5 s</td><td>NNV</td><td>9,7 s</td><td>4(8)</td><td>NV</td><td>5(10)</td><td>NNV</td><td>10°C</td><td>12°C</td><td>10 %</td><td></td></tr>
-<tr><td>18</td><td>1,2 m</td><td>9,2 s</td><td>SV</td><td>0,9 m</td><td>5 s</td><td>NV</td><td>9,6 s</td><td>6(10)</td><td>V</td><td>11(13)</td><td>NV</td><td>10°C</td><td>12°C</td><td>40 %</td><td></td></tr>
+"""
 
-<!-- Section divider row -->
-<tr class="section-row">
-    <td colspan="16">I morgen 15. nov</td>
+# Add time rows (all but the last row which is tomorrow)
+for i, row in enumerate(data[:-1]):
+    html_table += "<tr>"
+    for j, cell in enumerate(row):
+        html_table += f"<td>{cell}</td>"
+    html_table += "</tr>"
+
+# Add tomorrow row with merged cells
+html_table += f"""
+<tr class="tomorrow-row">
+    <td colspan="16">{tomorrow_str}</td>
 </tr>
+"""
 
-<tr><td>06</td><td>1,2 m</td><td>9,6 s</td><td>VSV</td><td>1,2 m</td><td>6 s</td><td>NNV</td><td>9,8 s</td><td>4(7)</td><td>NNV</td><td>4(7)</td><td>V</td><td>7°C</td><td>12°C</td><td>100 %</td><td>0,9 mm</td></tr>
-<tr><td>07</td><td>1,3 m</td><td>9,3 s</td><td>VSV</td><td>1,0 m</td><td>5 s</td><td>NNV</td><td>9,7 s</td><td>4(8)</td><td>NV</td><td>5(10)</td><td>NNV</td><td>7°C</td><td>12°C</td><td>100 %</td><td>1,1 mm</td></tr>
-<tr><td>08</td><td>1,2 m</td><td>9,2 s</td><td>SV</td><td>0,9 m</td><td>5 s</td><td>NV</td><td>9,6 s</td><td>4(7)</td><td>NNV</td><td>4(7)</td><td>V</td><td>8°C</td><td>12°C</td><td>100 %</td><td>0,3 mm</td></tr>
-<tr><td>09</td><td>1,2 m</td><td>9,6 s</td><td>VSV</td><td>1,2 m</td><td>6 s</td><td>NNV</td><td>9,8 s</td><td>4(8)</td><td>NV</td><td>5(10)</td><td>NNV</td><td>9°C</td><td>12°C</td><td>90 %</td><td></td></tr>
-<tr><td>10</td><td>1,2 m</td><td>9,6 s</td><td>VSV</td><td>1,2 m</td><td>6 s</td><td>NNV</td><td>9,8 s</td><td>4(7)</td><td>NNV</td><td>4(7)</td><td>V</td><td>10°C</td><td>12°C</td><td>70 %</td><td></td></tr>
-<tr><td>11</td><td>1,3 m</td><td>9,3 s</td><td>VSV</td><td>1,0 m</td><td>5 s</td><td>NNV</td><td>9,7 s</td><td>4(8)</td><td>NV</td><td>5(10)</td><td>NNV</td><td>11°C</td><td>12°C</td><td>100 %</td><td>0,5 mm</td></tr>
-<tr><td>12</td><td>1,2 m</td><td>9,2 s</td><td>SV</td><td>0,9 m</td><td>5 s</td><td>NV</td><td>9,6 s</td><td>6(10)</td><td>V</td><td>11(13)</td><td>NV</td><td>11°C</td><td>12°C</td><td>100 %</td><td>0,9 mm</td></tr>
+html_table += """
 </tbody>
 </table>
 </div>
 """
 
-components.html(html, height=1600, scrolling=True)
+# Display some info about the current setup
+st.write(f"**Current Oslo time:** {current_time.strftime('%H:%M')} on {current_time.strftime('%A %d. %b')}")
+st.write(f"**Time range:** Starting from {start_hour:02d}:00 (2 hours before current hour)")
+st.write(f"**Tomorrow:** {tomorrow_str}")
+
+st.components.v1.html(html_table, height=650)
