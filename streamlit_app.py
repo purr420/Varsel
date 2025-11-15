@@ -29,8 +29,6 @@ for i in range(24):
     row.extend(["-"] * 15)  # Rest of columns filled with dashes
     data.append(row)
 
-# Remove tomorrow row - keeping only 24 time-based rows
-
 # Create custom HTML table with sticky functionality
 html_table = f"""
 <style>
@@ -54,10 +52,10 @@ html_table = f"""
     text-align: center;
     vertical-align: middle;
     min-width: 60px;
-    background: #f8f9fa; /* Unified color for all cells */
+    background: #f8f9fa;
 }}
 
-/* First header row - sticky with higher z-index */
+/* First header row */
 .sticky-table thead tr:first-child th {{
     position: sticky;
     top: 0;
@@ -66,46 +64,41 @@ html_table = f"""
     z-index: 15;
 }}
 
-/* Second header row - sticky with moderate z-index (including Høyde) */
+/* SECOND HEADER ROW - FIXED (affects Høyde and all other cells in row 2) */
 .sticky-table thead tr:nth-child(2) th {{
     position: sticky;
     top: 40px;
     background: #f8f9fa;
     font-weight: bold;
-    z-index: 12;
+    z-index: 16; /* FIX: must be higher than first row (15) */
 }}
 
-/* Sticky first column - restored sticky functionality */
+/* Sticky first column */
 .sticky-table td:first-child,
 .sticky-table th:first-child {{
     position: sticky;
     left: 0;
-    background: #f8f9fa; /* Same unified color */
+    background: #f8f9fa;
     font-weight: bold;
     border-right: 2px solid #999;
     z-index: 20;
 }}
 
-/* Tid header - MAXIMUM z-index to override ALL other cells */
+/* Tid header - MAX sticky */
 .sticky-table thead th:first-child {{
     position: sticky !important;
     top: 0 !important;
     left: 0 !important;
-    background: #f8f9fa !important; /* Unified color */
+    background: #f8f9fa !important;
     border-right: 2px solid #999;
-    z-index: 100 !important; /* MAXIMUM priority - above everything */
+    z-index: 100 !important;
     font-weight: bold !important;
 }}
-
-
-
-
 </style>
 
 <div class="sticky-table-container">
 <table class="sticky-table">
 <thead>
-<!-- First header row with Norwegian labels and proper merging -->
 <tr>
     <th rowspan="2">Tid</th>
     <th colspan="3">Swell</th>
@@ -117,7 +110,6 @@ html_table = f"""
     <th rowspan="2">Skydekke</th>
     <th rowspan="2">Nedbør</th>
 </tr>
-<!-- Second header row with sub-headers -->
 <tr>
     <th>Høyde</th>
     <th>Periode</th>
@@ -153,6 +145,6 @@ html_table += """
 # Display some info about the current setup
 st.write(f"**Current Oslo time:** {current_time.strftime('%H:%M')} on {current_time.strftime('%A %d. %b')}")
 st.write(f"**Time range:** Starting from {start_hour:02d}:00 (2 hours before current hour)")
-st.write(f"**Høyde sticky behavior restored:** Second row headers z-index: 12, first row: 15, Tid corner: 100")
+st.write(f"**Høyde cell fixed:** z-index raised to 16 for correct sticky behavior")
 
 st.components.v1.html(html_table, height=650)
