@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-st.title("Weather Table - Fixed Høyde Cell Z-Index Issue")
+st.title("Weather Table - Høyde Cell Sticky Behavior Fixed")
 
 # Get current Oslo time (UTC+1 in winter, UTC+2 in summer)
 oslo_tz = pytz.timezone('Europe/Oslo')
@@ -57,22 +57,22 @@ html_table = f"""
     background: #f8f9fa; /* Unified color for all cells */
 }}
 
-/* Headers behave as concrete unit - both rows sticky together vertically */
-.sticky-table thead th {{
+/* First header row - sticky with higher z-index */
+.sticky-table thead tr:first-child th {{
     position: sticky;
+    top: 0;
     background: #f8f9fa;
     font-weight: bold;
-    z-index: 10;
+    z-index: 15;
 }}
 
-/* First header row */
-.sticky-table thead tr:first-child th {{
-    top: 0;
-}}
-
-/* Second header row - sticks right below first row */
+/* Second header row - sticky with moderate z-index (including Høyde) */
 .sticky-table thead tr:nth-child(2) th {{
+    position: sticky;
     top: 40px;
+    background: #f8f9fa;
+    font-weight: bold;
+    z-index: 12;
 }}
 
 /* Sticky first column - restored sticky functionality */
@@ -97,10 +97,7 @@ html_table = f"""
     font-weight: bold !important;
 }}
 
-/* Ensure all second row header cells have lower z-index */
-.sticky-table thead tr:nth-child(2) th {{
-    z-index: 5 !important; /* Lower than corner cell */
-}}
+
 
 
 </style>
@@ -156,6 +153,6 @@ html_table += """
 # Display some info about the current setup
 st.write(f"**Current Oslo time:** {current_time.strftime('%H:%M')} on {current_time.strftime('%A %d. %b')}")
 st.write(f"**Time range:** Starting from {start_hour:02d}:00 (2 hours before current hour)")
-st.write(f"**Fixed Høyde cell issue:** Tid corner z-index: 100 !important, second row headers z-index: 5")
+st.write(f"**Høyde sticky behavior restored:** Second row headers z-index: 12, first row: 15, Tid corner: 100")
 
 st.components.v1.html(html_table, height=650)
