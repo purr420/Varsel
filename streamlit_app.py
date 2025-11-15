@@ -29,8 +29,8 @@ table {
     text-align: center;
 }
 
-/* Sticky header */
-thead th {
+/* Sticky header - first row */
+thead tr:first-child th {
     position: sticky;
     top: 0;
     background: #000;
@@ -38,6 +38,18 @@ thead th {
     z-index: 10;
     border-bottom: 2px solid #444;
     font-size: 0.8rem; 
+    text-align: center;
+}
+
+/* Sticky header - second row */
+thead tr:nth-child(2) th {
+    position: sticky;
+    top: 32px; /* Height of first row approximately */
+    background: #000;
+    padding: 8px 12px;
+    z-index: 10;
+    border-bottom: 2px solid #444;
+    font-size: 0.8rem;
     text-align: center;
 }
 
