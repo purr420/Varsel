@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-st.title("Weather Table - Truly Locked Tid Corner Cell")
+st.title("Weather Table - Natural Scrolling with Concrete Headers")
 
 # Get current Oslo time (UTC+1 in winter, UTC+2 in summer)
 oslo_tz = pytz.timezone('Europe/Oslo')
@@ -56,42 +56,36 @@ html_table = f"""
     min-width: 60px;
 }}
 
-/* Sticky header - first row */
+/* Headers behave as concrete unit - both rows sticky together vertically */
+.sticky-table thead th {{
+    position: sticky;
+    background: #f8f9fa;
+    font-weight: bold;
+    z-index: 10;
+}}
+
+/* First header row */
 .sticky-table thead tr:first-child th {{
-    position: sticky;
     top: 0;
-    background: #f8f9fa;
-    z-index: 10;
-    font-weight: bold;
 }}
 
-/* Sticky header - second row */
+/* Second header row - sticks right below first row */
 .sticky-table thead tr:nth-child(2) th {{
-    position: sticky;
     top: 40px;
-    background: #f8f9fa;
-    z-index: 10;
-    font-weight: bold;
 }}
 
-/* Sticky first column */
+/* First column (including Tid and all time numbers) moves naturally */
 .sticky-table td:first-child,
 .sticky-table th:first-child {{
-    position: sticky;
-    left: 0;
-    background: #f8f9fa;
-    z-index: 20;
+    background: #f0f0f0;
     font-weight: bold;
+    border-right: 2px solid #999;
 }}
 
-/* Corner cell (Tid header) - truly locked in both directions */
+/* Tid header - special styling but no special positioning */
 .sticky-table thead th:first-child {{
-    position: sticky;
-    top: 0;
-    left: 0;
-    z-index: 100;
     background: #e9ecef;
-    font-weight: bold;
+    border-right: 2px solid #999;
 }}
 
 
@@ -148,6 +142,6 @@ html_table += """
 # Display some info about the current setup
 st.write(f"**Current Oslo time:** {current_time.strftime('%H:%M')} on {current_time.strftime('%A %d. %b')}")
 st.write(f"**Time range:** Starting from {start_hour:02d}:00 (2 hours before current hour)")
-st.write(f"**Truly locked Tid:** Corner cell with position: sticky, top: 0, left: 0, z-index: 100")
+st.write(f"**Natural scrolling:** Headers stick as concrete unit vertically, Tid moves naturally with time column")
 
 st.components.v1.html(html_table, height=650)
