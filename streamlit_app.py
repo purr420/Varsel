@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-st.title("Weather Table - Sticky Left Column with Unified Colors")
+st.title("Weather Table - Fixed Høyde Cell Z-Index Issue")
 
 # Get current Oslo time (UTC+1 in winter, UTC+2 in summer)
 oslo_tz = pytz.timezone('Europe/Oslo')
@@ -86,11 +86,20 @@ html_table = f"""
     z-index: 20;
 }}
 
-/* Tid header - same color as other cells but higher z-index for corner */
+/* Tid header - MAXIMUM z-index to override ALL other cells */
 .sticky-table thead th:first-child {{
-    background: #f8f9fa; /* Unified color */
+    position: sticky !important;
+    top: 0 !important;
+    left: 0 !important;
+    background: #f8f9fa !important; /* Unified color */
     border-right: 2px solid #999;
-    z-index: 30; /* Higher priority for corner cell */
+    z-index: 100 !important; /* MAXIMUM priority - above everything */
+    font-weight: bold !important;
+}}
+
+/* Ensure all second row header cells have lower z-index */
+.sticky-table thead tr:nth-child(2) th {{
+    z-index: 5 !important; /* Lower than corner cell */
 }}
 
 
@@ -147,6 +156,6 @@ html_table += """
 # Display some info about the current setup
 st.write(f"**Current Oslo time:** {current_time.strftime('%H:%M')} on {current_time.strftime('%A %d. %b')}")
 st.write(f"**Time range:** Starting from {start_hour:02d}:00 (2 hours before current hour)")
-st.write(f"**Sticky left column restored + unified colors:** Left column sticky, all cells same #f8f9fa color")
+st.write(f"**Fixed Høyde cell issue:** Tid corner z-index: 100 !important, second row headers z-index: 5")
 
 st.components.v1.html(html_table, height=650)
