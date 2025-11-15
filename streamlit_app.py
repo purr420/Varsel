@@ -29,10 +29,9 @@ table {
     text-align: center;
 }
 
-/* Sticky header - first row */
-thead tr:first-child th {
+/* Sticky headers - all header cells */
+thead th {
     position: sticky;
-    top: 0;
     background: #000;
     padding: 8px 12px; /* litt mer luft */
     z-index: 10;
@@ -41,25 +40,14 @@ thead tr:first-child th {
     text-align: center;
 }
 
-/* Sticky header - second row */
-thead tr:nth-child(2) th {
-    position: sticky;
-    top: 32px; /* Height of first row approximately */
-    background: #000;
-    padding: 8px 12px;
-    z-index: 10;
-    border-bottom: 2px solid #444;
-    font-size: 0.8rem;
-    text-align: center;
+/* First header row */
+thead tr:first-child th {
+    top: 0;
 }
 
-/* Sticky first column */
-td:first-child, th:first-child {
-    position: sticky;
-    left: 0;
-    background: #000;
-    z-index: 20;
-    border-right: 2px solid #444;
+/* Second header row */
+thead tr:nth-child(2) th {
+    top: 40px; /* Adjust based on first row height */
 }
 
 /* Special styling for section headers (like "I morgen 15. nov") */
@@ -75,9 +63,10 @@ td:first-child, th:first-child {
 
 .section-row td {
     background: #222 !important;
-    font-weight: bold;
-    padding: 12px;
-    text-align: center;
+    font-weight: normal;
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 0.8rem;
 }
 
 /* Rows */
