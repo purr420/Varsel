@@ -1,177 +1,137 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
-st.title("Weather Table - Perfect Sticky Headers (Colspan Bug Fixed)")
+st.title("Weather Table - Sticky Left Column with Unified Colors")
 
-# Get current Oslo time
+# Get current Oslo time (UTC+1 in winter, UTC+2 in summer)
 oslo_tz = pytz.timezone('Europe/Oslo')
 current_time = datetime.now(oslo_tz)
 current_hour = current_time.hour
 
-# Start 2 hours before current hour
+# Start time: 2 hours before current hour
 start_hour = (current_hour - 2) % 24
 
-# Build 24-hour rows
+# Create header row with letters a-p (16 columns)
+columns = [chr(ord('a') + i) for i in range(16)]
+
+# Create time-based rows (24 hours starting from 2 hours before current)
 data = []
+times = []
+
 for i in range(24):
     hour = (start_hour + i) % 24
-    row = [f"{hour:02d}"] + ["-"] * 15
+    time_str = f"{hour:02d}"
+    times.append(time_str)
+    
+    row = [time_str]  # First column: time
+    row.extend(["-"] * 15)  # Rest of columns filled with dashes
     data.append(row)
 
+# Remove tomorrow row - keeping only 24 time-based rows
 
-# --- HTML + CSS (no f-string because of { }) ---
-html_table = """
+# Create custom HTML table with sticky functionality
+html_table = f"""
 <style>
-
-.sticky-table-container {
+.sticky-table-container {{
     max-height: 600px;
     overflow: auto;
-    border: 1px solid #ccc;
-}
+    border: 1px solid #ddd;
+    margin: 10px 0;
+}}
 
-.sticky-table {
+.sticky-table {{
     width: 100%;
     border-collapse: collapse;
     background: white;
-}
+}}
 
 .sticky-table th,
-.sticky-table td {
+.sticky-table td {{
     border: 1px solid #ddd;
     padding: 8px;
     text-align: center;
+    vertical-align: middle;
     min-width: 60px;
-    background: #ffffff;
-}
+    background: #f8f9fa; /* Unified color for all cells */
+}}
 
-/* ------------------------------
-   FIX: FORCE EXPLICIT HEADER HEIGHTS
---------------------------------*/
-.sticky-table thead tr:first-child th {
+/* Headers behave as concrete unit - both rows sticky together vertically */
+.sticky-table thead th {{
     position: sticky;
+    background: #f8f9fa;
+    font-weight: bold;
+    z-index: 10;
+}}
+
+/* First header row */
+.sticky-table thead tr:first-child th {{
     top: 0;
-    height: 40px;
-    background: #f8f9fa;
-    font-weight: bold;
-    z-index: 20;
-}
+}}
 
-.sticky-table thead tr:nth-child(2) th {
-    position: sticky;
+/* Second header row - sticks right below first row */
+.sticky-table thead tr:nth-child(2) th {{
     top: 40px;
-    height: 40px;
-    background: #f8f9fa;
-    z-index: 25;
-    font-weight: bold;
-}
+}}
 
-/* ------------------------------
-   FIX: STICKY FIRST COLUMN
---------------------------------*/
-.sticky-table th:first-child,
-.sticky-table td:first-child {
+/* Sticky first column - restored sticky functionality */
+.sticky-table td:first-child,
+.sticky-table th:first-child {{
     position: sticky;
     left: 0;
-    background: #f8f9fa;
+    background: #f8f9fa; /* Same unified color */
     font-weight: bold;
-    border-right: 2px solid #aaa;
-    z-index: 30;
-}
+    border-right: 2px solid #999;
+    z-index: 20;
+}}
 
-/* ------------------------------
-   FIX: NO MORE COLSPAN → VISUALLY MERGE
---------------------------------*/
+/* Tid header - same color as other cells but higher z-index for corner */
+.sticky-table thead th:first-child {{
+    background: #f8f9fa; /* Unified color */
+    border-right: 2px solid #999;
+    z-index: 30; /* Higher priority for corner cell */
+}}
 
-/* 3-column block parent (label cell) */
-.merge-parent {
-    background: #f0f0f0;
-    font-weight: bold;
-    text-align: center;
-    border-right: none;
-}
-
-/* Fake merged cells */
-.merge-child {
-    background: #f0f0f0;
-    border-left: none;
-    border-right: none;
-}
-
-/* Make the grouped block visually one */
-.group-right-border {
-    border-right: 1px solid #ddd !important;
-}
 
 </style>
 
-
 <div class="sticky-table-container">
 <table class="sticky-table">
-
 <thead>
-
-<!-- ROW 1 – NO COLSPAN -->
+<!-- First header row with Norwegian labels and proper merging -->
 <tr>
     <th rowspan="2">Tid</th>
-
-    <!-- Swell (3 columns merged visually) -->
-    <th class="merge-parent">Swell</th>
-    <th class="merge-child"></th>
-    <th class="merge-child group-right-border"></th>
-
-    <!-- Vindbølger (3 columns merged visually) -->
-    <th class="merge-parent">Vindbølger</th>
-    <th class="merge-child"></th>
-    <th class="merge-child group-right-border"></th>
-
-    <th rowspan="1">Periode</th>
-
-    <!-- yr Vind(kast) -->
-    <th class="merge-parent">yr Vind</th>
-    <th class="merge-child group-right-border"></th>
-
-    <!-- dmi Vind(kast) -->
-    <th class="merge-parent">dmi Vind</th>
-    <th class="merge-child group-right-border"></th>
-
-    <!-- Temperatur (2 columns) -->
-    <th class="merge-parent">Temperatur</th>
-    <th class="merge-child group-right-border"></th>
-
+    <th colspan="3">Swell</th>
+    <th colspan="3">Vindbølger</th>
+    <th>Periode</th>
+    <th colspan="2">yr Vind(kast)</th>
+    <th colspan="2">dmi Vind(kast)</th>
+    <th colspan="2">Temperatur</th>
     <th rowspan="2">Skydekke</th>
     <th rowspan="2">Nedbør</th>
 </tr>
-
-<!-- ROW 2 – SUBHEADERS (all sticky) -->
+<!-- Second header row with sub-headers -->
 <tr>
     <th>Høyde</th>
     <th>Periode</th>
     <th>Retning</th>
-
     <th>Høyde</th>
     <th>Periode</th>
     <th>Retning</th>
-
     <th>dominant</th>
-
     <th>Styrke</th>
     <th>Retning</th>
-
     <th>Styrke</th>
     <th>Retning</th>
-
     <th>Land</th>
     <th>Hav</th>
 </tr>
-
 </thead>
-
 <tbody>
 """
 
-# Add data rows
+# Add all time rows
 for row in data:
     html_table += "<tr>"
     for cell in row:
@@ -184,7 +144,9 @@ html_table += """
 </div>
 """
 
-# Display info
-st.write(f"**Current Oslo time:** {current_time.strftime('%H:%M — %A %d.%m')}")
+# Display some info about the current setup
+st.write(f"**Current Oslo time:** {current_time.strftime('%H:%M')} on {current_time.strftime('%A %d. %b')}")
+st.write(f"**Time range:** Starting from {start_hour:02d}:00 (2 hours before current hour)")
+st.write(f"**Sticky left column restored + unified colors:** Left column sticky, all cells same #f8f9fa color")
 
 st.components.v1.html(html_table, height=650)
