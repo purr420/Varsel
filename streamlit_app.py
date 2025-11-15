@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-st.title("Weather Table - Natural Scrolling with Concrete Headers")
+st.title("Weather Table - Sticky Left Column with Unified Colors")
 
 # Get current Oslo time (UTC+1 in winter, UTC+2 in summer)
 oslo_tz = pytz.timezone('Europe/Oslo')
@@ -54,6 +54,7 @@ html_table = f"""
     text-align: center;
     vertical-align: middle;
     min-width: 60px;
+    background: #f8f9fa; /* Unified color for all cells */
 }}
 
 /* Headers behave as concrete unit - both rows sticky together vertically */
@@ -74,18 +75,22 @@ html_table = f"""
     top: 40px;
 }}
 
-/* First column (including Tid and all time numbers) moves naturally */
+/* Sticky first column - restored sticky functionality */
 .sticky-table td:first-child,
 .sticky-table th:first-child {{
-    background: #f0f0f0;
+    position: sticky;
+    left: 0;
+    background: #f8f9fa; /* Same unified color */
     font-weight: bold;
     border-right: 2px solid #999;
+    z-index: 20;
 }}
 
-/* Tid header - special styling but no special positioning */
+/* Tid header - same color as other cells but higher z-index for corner */
 .sticky-table thead th:first-child {{
-    background: #e9ecef;
+    background: #f8f9fa; /* Unified color */
     border-right: 2px solid #999;
+    z-index: 30; /* Higher priority for corner cell */
 }}
 
 
@@ -142,6 +147,6 @@ html_table += """
 # Display some info about the current setup
 st.write(f"**Current Oslo time:** {current_time.strftime('%H:%M')} on {current_time.strftime('%A %d. %b')}")
 st.write(f"**Time range:** Starting from {start_hour:02d}:00 (2 hours before current hour)")
-st.write(f"**Natural scrolling:** Headers stick as concrete unit vertically, Tid moves naturally with time column")
+st.write(f"**Sticky left column restored + unified colors:** Left column sticky, all cells same #f8f9fa color")
 
 st.components.v1.html(html_table, height=650)
