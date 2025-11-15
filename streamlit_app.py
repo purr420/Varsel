@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-st.title("Weather Table - Fixed Corner Sticky & Temperatur Headers")
+st.title("Weather Table - Truly Locked Tid Corner Cell")
 
 # Get current Oslo time (UTC+1 in winter, UTC+2 in summer)
 oslo_tz = pytz.timezone('Europe/Oslo')
@@ -84,10 +84,14 @@ html_table = f"""
     font-weight: bold;
 }}
 
-/* Corner cell (Tid header) - highest priority to stay in front */
+/* Corner cell (Tid header) - truly locked in both directions */
 .sticky-table thead th:first-child {{
-    z-index: 50;
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 100;
     background: #e9ecef;
+    font-weight: bold;
 }}
 
 
@@ -144,6 +148,6 @@ html_table += """
 # Display some info about the current setup
 st.write(f"**Current Oslo time:** {current_time.strftime('%H:%M')} on {current_time.strftime('%A %d. %b')}")
 st.write(f"**Time range:** Starting from {start_hour:02d}:00 (2 hours before current hour)")
-st.write(f"**Fixed headers:** Tid corner cell (z-index: 50), Temperatur with Land/Hav subcells")
+st.write(f"**Truly locked Tid:** Corner cell with position: sticky, top: 0, left: 0, z-index: 100")
 
 st.components.v1.html(html_table, height=650)
