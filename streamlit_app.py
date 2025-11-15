@@ -29,35 +29,35 @@ for i in range(24):
     row.extend(["-"] * 15)  # Rest of columns filled with dashes
     data.append(row)
 
-# Create custom HTML table with sticky functionality
-html_table = f"""
+# NOTE: Use a normal (non-f) triple-quoted string so { } in CSS/HTML don't break Python f-string parsing
+html_table = """
 <style>
 /* --- Container & base table --- */
-.sticky-table-container {{
+.sticky-table-container {
     max-height: 600px;
     overflow: auto;
     border: 1px solid #ddd;
     margin: 10px 0;
-}}
+}
 
-.sticky-table {{
+.sticky-table {
     width: 100%;
     border-collapse: collapse;
     background: white;
-}}
+}
 
 .sticky-table th,
-.sticky-table td {{
+.sticky-table td {
     border: 1px solid #ddd;
     padding: 8px;
     text-align: center;
     vertical-align: middle;
     min-width: 60px;
     background: #f8f9fa;
-}}
+}
 
 /* --- Force explicit header heights so 'top' aligns exactly --- */
-.sticky-table thead tr:first-child th {{
+.sticky-table thead tr:first-child th {
     position: sticky;
     top: 0;
     height: 40px;                 /* explicit first header height */
@@ -65,9 +65,9 @@ html_table = f"""
     background: #f8f9fa;
     font-weight: bold;
     z-index: 15;
-}}
+}
 
-.sticky-table thead tr:nth-child(2) th {{
+.sticky-table thead tr:nth-child(2) th {
     position: sticky;
     top: 40px;                    /* must match first header height */
     height: 40px;                 /* explicit second header height */
@@ -79,17 +79,17 @@ html_table = f"""
 
 /* --- Sticky first column --- */
 .sticky-table td:first-child,
-.sticky-table th:first-child {{
+.sticky-table th:first-child {
     position: sticky;
     left: 0;
     background: #f8f9fa;
     font-weight: bold;
     border-right: 2px solid #999;
     z-index: 20;
-}}
+}
 
 /* --- Tid header - MAX sticky (corner) --- */
-.sticky-table thead th:first-child {{
+.sticky-table thead th:first-child {
     position: sticky !important;
     top: 0 !important;
     left: 0 !important;
@@ -97,43 +97,43 @@ html_table = f"""
     border-right: 2px solid #999;
     z-index: 100 !important;
     font-weight: bold !important;
-}}
+}
 
 /* --- >>> TARGETED FIX: Høyde cell (second header row, first TH in that row) --- */
 /* This selector targets the first <th> inside the second <tr> of the thead,
    which in your markup is the "Høyde" cell. */
-.sticky-table thead tr:nth-child(2) th:first-child {{
+.sticky-table thead tr:nth-child(2) th:first-child {
     /* ensure sticky and exact top */
     position: sticky;
     top: 40px;                    /* same as other second-row headers */
     z-index: 250 !important;      /* HIGHER than parent colspan (15) and other headers */
-    
+
     /* border and background to match adjacent header cells */
     background: #f8f9fa !important;
     border-right: 1px solid #ddd !important;
     border-left: 1px solid #ddd !important;
     box-shadow: 0 1px 0 0 rgba(0,0,0,0.02); /* hide thin seam on some browsers */
-    
+
     /* keep visual identical to the cell to its right */
     font-weight: bold;
     text-align: center;
-}}
+}
 
 /* --- Slight safety for adjacent cells so borders align --- */
-.sticky-table thead tr:nth-child(2) th + th {{
+.sticky-table thead tr:nth-child(2) th + th {
     border-left: 1px solid #ddd;
-}}
+}
 
 /* --- Small tweak: ensure collapsed borders don't show odd hairlines --- */
-.sticky-table td, .sticky-table th {{
+.sticky-table td, .sticky-table th {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-}}
+}
 
 /* optional: ensure body rows have white background so stacked headers look clean */
-.sticky-table tbody td {{
+.sticky-table tbody td {
     background: #ffffff;
-}}
+}
 </style>
 
 <div class="sticky-table-container">
