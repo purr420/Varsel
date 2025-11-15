@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-st.title("Weather Table - Høyde Cell Sticky Behavior Fixed")
+st.title("Weather Table - Høyde Cell Sticky Behavior Fixed (targeted)")
 
 # Get current Oslo time (UTC+1 in winter, UTC+2 in summer)
 oslo_tz = pytz.timezone('Europe/Oslo')
@@ -32,6 +32,7 @@ for i in range(24):
 # Create custom HTML table with sticky functionality
 html_table = f"""
 <style>
+/* --- Container & base table --- */
 .sticky-table-container {{
     max-height: 600px;
     overflow: auto;
@@ -55,25 +56,28 @@ html_table = f"""
     background: #f8f9fa;
 }}
 
-/* First header row */
+/* --- Force explicit header heights so 'top' aligns exactly --- */
 .sticky-table thead tr:first-child th {{
     position: sticky;
     top: 0;
+    height: 40px;                 /* explicit first header height */
+    line-height: 24px;
     background: #f8f9fa;
     font-weight: bold;
     z-index: 15;
 }}
 
-/* SECOND HEADER ROW - FIXED (affects Høyde and all other cells in row 2) */
 .sticky-table thead tr:nth-child(2) th {{
     position: sticky;
-    top: 40px;
+    top: 40px;                    /* must match first header height */
+    height: 40px;                 /* explicit second header height */
+    line-height: 24px;
     background: #f8f9fa;
     font-weight: bold;
-    z-index: 16; /* FIX: must be higher than first row (15) */
-}}
+    z-index: 16;                  /* keeps entire second row above first row */
+}
 
-/* Sticky first column */
+/* --- Sticky first column --- */
 .sticky-table td:first-child,
 .sticky-table th:first-child {{
     position: sticky;
@@ -84,7 +88,7 @@ html_table = f"""
     z-index: 20;
 }}
 
-/* Tid header - MAX sticky */
+/* --- Tid header - MAX sticky (corner) --- */
 .sticky-table thead th:first-child {{
     position: sticky !important;
     top: 0 !important;
@@ -93,6 +97,42 @@ html_table = f"""
     border-right: 2px solid #999;
     z-index: 100 !important;
     font-weight: bold !important;
+}}
+
+/* --- >>> TARGETED FIX: Høyde cell (second header row, first TH in that row) --- */
+/* This selector targets the first <th> inside the second <tr> of the thead,
+   which in your markup is the "Høyde" cell. */
+.sticky-table thead tr:nth-child(2) th:first-child {{
+    /* ensure sticky and exact top */
+    position: sticky;
+    top: 40px;                    /* same as other second-row headers */
+    z-index: 250 !important;      /* HIGHER than parent colspan (15) and other headers */
+    
+    /* border and background to match adjacent header cells */
+    background: #f8f9fa !important;
+    border-right: 1px solid #ddd !important;
+    border-left: 1px solid #ddd !important;
+    box-shadow: 0 1px 0 0 rgba(0,0,0,0.02); /* hide thin seam on some browsers */
+    
+    /* keep visual identical to the cell to its right */
+    font-weight: bold;
+    text-align: center;
+}}
+
+/* --- Slight safety for adjacent cells so borders align --- */
+.sticky-table thead tr:nth-child(2) th + th {{
+    border-left: 1px solid #ddd;
+}}
+
+/* --- Small tweak: ensure collapsed borders don't show odd hairlines --- */
+.sticky-table td, .sticky-table th {{
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}}
+
+/* optional: ensure body rows have white background so stacked headers look clean */
+.sticky-table tbody td {{
+    background: #ffffff;
 }}
 </style>
 
@@ -145,6 +185,6 @@ html_table += """
 # Display some info about the current setup
 st.write(f"**Current Oslo time:** {current_time.strftime('%H:%M')} on {current_time.strftime('%A %d. %b')}")
 st.write(f"**Time range:** Starting from {start_hour:02d}:00 (2 hours before current hour)")
-st.write(f"**Høyde cell fixed:** z-index raised to 16 for correct sticky behavior")
+st.write(f"**Targeted fix applied:** Høyde cell now has individual z-index, borders and box-shadow to eliminate seam/jump")
 
 st.components.v1.html(html_table, height=650)
