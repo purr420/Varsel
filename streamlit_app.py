@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-st.title("Weather Table with Norwegian Headers")
+st.title("Weather Table - Fixed Corner Sticky & Temperatur Headers")
 
 # Get current Oslo time (UTC+1 in winter, UTC+2 in summer)
 oslo_tz = pytz.timezone('Europe/Oslo')
@@ -84,9 +84,9 @@ html_table = f"""
     font-weight: bold;
 }}
 
-/* Corner cells (header + first column) */
+/* Corner cell (Tid header) - highest priority to stay in front */
 .sticky-table thead th:first-child {{
-    z-index: 30;
+    z-index: 50;
     background: #e9ecef;
 }}
 
@@ -104,7 +104,7 @@ html_table = f"""
     <th>Periode</th>
     <th colspan="2">yr Vind(kast)</th>
     <th colspan="2">dmi Vind(kast)</th>
-    <th colspan="2" rowspan="2">Temperatur</th>
+    <th colspan="2">Temperatur</th>
     <th rowspan="2">Skydekke</th>
     <th rowspan="2">Nedbør</th>
 </tr>
@@ -121,6 +121,8 @@ html_table = f"""
     <th>Retning</th>
     <th>Styrke</th>
     <th>Retning</th>
+    <th>Land</th>
+    <th>Hav</th>
 </tr>
 </thead>
 <tbody>
@@ -142,6 +144,6 @@ html_table += """
 # Display some info about the current setup
 st.write(f"**Current Oslo time:** {current_time.strftime('%H:%M')} on {current_time.strftime('%A %d. %b')}")
 st.write(f"**Time range:** Starting from {start_hour:02d}:00 (2 hours before current hour)")
-st.write(f"**Norwegian weather headers:** Tid, Swell, Vindbølger, Periode, yr/dmi Vind(kast), Temperatur, Skydekke, Nedbør")
+st.write(f"**Fixed headers:** Tid corner cell (z-index: 50), Temperatur with Land/Hav subcells")
 
 st.components.v1.html(html_table, height=650)
