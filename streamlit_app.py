@@ -71,11 +71,20 @@ html = f"""
     background: #ececec;
     z-index: 10;
 }}
+
+/* Fix rowspan headers alignment */
+.sticky-table thead th[rowspan] {{
+    top: 0 !important;
+}}
+
+/* Top row */
 .sticky-table thead tr:first-child th {{
     top: 0;
 }}
+/* Second row */
 .sticky-table thead tr:nth-child(2) th {{
-    top: 40px;
+    top: 36px;  /* matches first row height, tweak if needed */
+    z-index: 11;
 }}
 
 /* Sticky first column */
@@ -88,6 +97,7 @@ html = f"""
     font-weight: bold;
 }}
 
+/* Top-left corner (Tid) */
 .sticky-table thead tr:first-child th:first-child {{
     z-index: 30 !important;
 }}
