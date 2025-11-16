@@ -144,7 +144,7 @@ html = f"""
 # Alignment rules (index-based)
 # ----------------------------------------
 ALIGN = {
-    1: "center",
+    1: "center",  # Tid (skal ikke røres)
     2: "right",
     3: "center",
     4: "left",
@@ -156,10 +156,14 @@ ALIGN = {
     10: "left",
     11: "right",
     12: "left",
+    13: "center",
+    14: "center",
+    15: "center",
 }
 
 def col_align(i):
     return ALIGN.get(i, "center")
+
 
 # ----------------------------------------
 # INSERT ROWS + DAY CHANGE SEPARATORS
