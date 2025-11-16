@@ -12,22 +12,21 @@ current_hour = now.hour
 # Start 2 hours before current hour
 start_hour = (current_hour - 2) % 24
 
-# Build 48 hours to ensure a day change happens
+# Norwegian weekday + month names
+WEEKDAY_NO = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søndag"]
+MONTH_NO = ["jan", "feb", "mar", "apr", "mai", "jun",
+            "jul", "aug", "sep", "okt", "nov", "des"]
+
+# Build enough rows to cover day change
 rows = []
 current_datetime = now - timedelta(hours=2)
 
-for i in range(36):  # Enough to cover today + tomorrow morning
+for i in range(36):
     hour_str = current_datetime.strftime("%H")
-    date_str = current_datetime.strftime("%d. %b")
-    weekday = current_datetime.strftime("%A")
-
     rows.append({
         "hour": hour_str,
-        "date": date_str,
-        "weekday": weekday,
         "datetime": current_datetime
     })
-
     current_datetime += timedelta(hours=1)
 
 # ---------------------------------------------
@@ -45,7 +44,7 @@ html = f"""
 .sticky-table {{
     width: 100%;
     border-collapse: collapse;
-    background: #f7f7f7;  /* soft background */
+    background: #f7f7f7;
 }}
 
 .sticky-table th,
@@ -58,7 +57,7 @@ html = f"""
     border: none;
 }}
 
-/* Header rows - slightly darker */
+/* Header rows */
 .header-top {{
     background: #ececec !important;
 }}
@@ -89,7 +88,6 @@ html = f"""
     font-weight: bold;
 }}
 
-/* Top-left corner (Tid) */
 .sticky-table thead tr:first-child th:first-child {{
     z-index: 30 !important;
 }}
@@ -101,6 +99,8 @@ html = f"""
 }}
 .day-separator td {{
     background: #e0e0e0 !important;
+    text-align: left !important;
+    padding-left: 12px;
 }}
 </style>
 
@@ -141,35 +141,67 @@ html = f"""
 """
 
 # ----------------------------------------
+# Alignment rules (index-based)
+# ----------------------------------------
+ALIGN = {
+    1: "center",
+    2: "right",
+    3: "center",
+    4: "left",
+    5: "right",
+    6: "center",
+    7: "left",
+    8: "center",
+    9: "right",
+    10: "left",
+    11: "right",
+    12: "left",
+}
+
+def col_align(i):
+    return ALIGN.get(i, "center")
+
+# ----------------------------------------
 # INSERT ROWS + DAY CHANGE SEPARATORS
 # ----------------------------------------
+
 last_date = None
 
 for r in rows:
-    this_date = r["datetime"].date()
+    dt = r["datetime"]
+    this_date = dt.date()
 
-    # Insert day separator when date changes
     if last_date is not None and this_date != last_date:
 
-        tomorrow_label = ""
-        if this_date == (now + timedelta(days=1)).date():
-            tomorrow_label = f"I morgen ({r['datetime'].strftime('%d. %b')})"
+        # Determine label
+        day_diff = (this_date - now.date()).days
+        day = dt.day
+        month = MONTH_NO[dt.month - 1]
+        weekday = WEEKDAY_NO[dt.weekday()]
+
+        if day_diff == 1:
+            label = f"I morgen {day}. {month}"
         else:
-            tomorrow_label = r["datetime"].strftime("%d. %b")
+            label = f"{weekday} {day}. {month}"
 
         html += f"""
         <tr class="day-separator">
             <td></td>
-            <td colspan="15">{tomorrow_label}</td>
+            <td colspan="15">{label}</td>
         </tr>
         """
 
     last_date = this_date
 
-    # Add normal hourly row
+    # Normal row
     html += "<tr>"
     html += f"<td>{r['hour']}</td>"
-    html += "".join("<td>-</td>" for _ in range(15))
+
+    # Data columns with alignment
+    for i in range(1, 16):
+        align = col_align(i)
+        html += f'<td style="text-align:{align}">-</td>'
+
     html += "</tr>"
 
 html += """
@@ -178,8 +210,8 @@ html += """
 </div>
 """
 
-# Show debug text
-st.write(f"**Oslo:** {now.strftime('%H:%M %d.%m %Y')}")
+# Debug
+st.write(f"**Oslo:** {now.strftime('%H:%M %d.%m.%Y')}")
 
-# Render the table
+# Render table
 st.components.v1.html(html, height=700)
