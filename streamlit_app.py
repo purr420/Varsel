@@ -1,99 +1,114 @@
 import streamlit as st
-import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
-st.title("Weather Table - Sticky Headers + Fixed Høyde Behavior")
+st.title("Weather Table – Day Separator + Clean Style")
 
 # Get current Oslo time
 oslo_tz = pytz.timezone('Europe/Oslo')
-current_time = datetime.now(oslo_tz)
-current_hour = current_time.hour
+now = datetime.now(oslo_tz)
+current_hour = now.hour
 
 # Start 2 hours before current hour
 start_hour = (current_hour - 2) % 24
 
-# Build data rows
-data = []
-for i in range(24):
-    hour = (start_hour + i) % 24
-    row = [f"{hour:02d}"] + ["-"] * 15
-    data.append(row)
+# Build 48 hours to ensure a day change happens
+rows = []
+current_datetime = now - timedelta(hours=2)
+
+for i in range(36):  # Enough to cover today + tomorrow morning
+    hour_str = current_datetime.strftime("%H")
+    date_str = current_datetime.strftime("%d. %b")
+    weekday = current_datetime.strftime("%A")
+
+    rows.append({
+        "hour": hour_str,
+        "date": date_str,
+        "weekday": weekday,
+        "datetime": current_datetime
+    })
+
+    current_datetime += timedelta(hours=1)
 
 # ---------------------------------------------
 # HTML + CSS TABLE
 # ---------------------------------------------
-html_table = f"""
+html = f"""
 <style>
 .sticky-table-container {{
-    max-height: 600px;
+    max-height: 650px;
     overflow: auto;
-    border: 1px solid #ddd;
-    margin: 10px 0;
+    border-radius: 6px;
+    background: #f4f4f4;
 }}
 
 .sticky-table {{
     width: 100%;
     border-collapse: collapse;
-    background: white;
+    background: #f7f7f7;  /* soft background */
 }}
 
 .sticky-table th,
 .sticky-table td {{
-    border: 1px solid #ddd;
     padding: 8px;
     text-align: center;
     vertical-align: middle;
     min-width: 60px;
-    background: #f8f9fa;
+    background: #f7f7f7;
+    border: none;
 }}
 
-/* Make all header cells sticky */
+/* Header rows - slightly darker */
+.header-top {{
+    background: #ececec !important;
+}}
+.header-sub {{
+    background: #ececec !important;
+}}
+
+/* Sticky header rows */
 .sticky-table thead th {{
     position: sticky;
-    background: #f8f9fa;
-    font-weight: bold;
+    background: #ececec;
     z-index: 10;
 }}
-
-/* First header row sticks at top */
 .sticky-table thead tr:first-child th {{
     top: 0;
 }}
-
-/* Second header row sticks under first */
 .sticky-table thead tr:nth-child(2) th {{
     top: 40px;
 }}
 
-/* Sticky first column for ALL rows */
+/* Sticky first column */
 .sticky-table td:first-child,
 .sticky-table th:first-child {{
     position: sticky;
     left: 0;
-    background: #f8f9fa;
-    font-weight: bold;
-    border-right: 2px solid #999;
+    background: #ececec;
     z-index: 20;
+    font-weight: bold;
 }}
 
-/* FIX 1: Only the top-left corner gets highest z-index */
+/* Top-left corner (Tid) */
 .sticky-table thead tr:first-child th:first-child {{
     z-index: 30 !important;
 }}
 
-/* FIX 2: Prevent "Høyde" from acting like the corner sticky */
-.sticky-table thead tr:nth-child(2) th:first-child {{
-    left: auto !important;
-    z-index: 12 !important;
+/* Day separator row */
+.day-separator {{
+    background: #e0e0e0 !important;
+    font-weight: bold;
+}}
+.day-separator td {{
+    background: #e0e0e0 !important;
 }}
 </style>
 
 <div class="sticky-table-container">
 <table class="sticky-table">
-<thead>
 
-<tr>
+<thead>
+<tr class="header-top">
     <th rowspan="2">Tid</th>
     <th colspan="3">Swell</th>
     <th colspan="3">Vindbølger</th>
@@ -105,7 +120,7 @@ html_table = f"""
     <th rowspan="2">Nedbør</th>
 </tr>
 
-<tr>
+<tr class="header-sub">
     <th>Høyde</th>
     <th>Periode</th>
     <th>Retning</th>
@@ -120,27 +135,51 @@ html_table = f"""
     <th>Land</th>
     <th>Hav</th>
 </tr>
-
 </thead>
+
 <tbody>
 """
 
-# Add data rows
-for row in data:
-    html_table += "<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
+# ----------------------------------------
+# INSERT ROWS + DAY CHANGE SEPARATORS
+# ----------------------------------------
+last_date = None
 
-html_table += """
+for r in rows:
+    this_date = r["datetime"].date()
+
+    # Insert day separator when date changes
+    if last_date is not None and this_date != last_date:
+
+        tomorrow_label = ""
+        if this_date == (now + timedelta(days=1)).date():
+            tomorrow_label = f"I morgen ({r['datetime'].strftime('%d. %b')})"
+        else:
+            tomorrow_label = r["datetime"].strftime("%d. %b")
+
+        html += f"""
+        <tr class="day-separator">
+            <td></td>
+            <td colspan="15">{tomorrow_label}</td>
+        </tr>
+        """
+
+    last_date = this_date
+
+    # Add normal hourly row
+    html += "<tr>"
+    html += f"<td>{r['hour']}</td>"
+    html += "".join("<td>-</td>" for _ in range(15))
+    html += "</tr>"
+
+html += """
 </tbody>
 </table>
 </div>
 """
 
-# Display debug info
-st.write(
-    f"**Oslo time:** {current_time.strftime('%H:%M')} — "
-    f"{current_time.strftime('%A %d.%m')}"
-)
-st.write(f"**Start hour:** {start_hour:02d}")
+# Show debug text
+st.write(f"**Oslo:** {now.strftime('%H:%M %d.%m %Y')}")
 
-# Render table
-st.components.v1.html(html_table, height=650)
+# Render the table
+st.components.v1.html(html, height=700)
