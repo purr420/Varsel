@@ -20,7 +20,6 @@ MONTH_NO = ["jan", "feb", "mar", "apr", "mai", "jun",
 # Build enough rows to cover day change
 rows = []
 current_datetime = now - timedelta(hours=2)
-
 for i in range(36):
     hour_str = current_datetime.strftime("%H")
     rows.append({
@@ -28,30 +27,6 @@ for i in range(36):
         "datetime": current_datetime
     })
     current_datetime += timedelta(hours=1)
-
-# ----------------------------------------
-# Alignment rules (index-based)
-# ----------------------------------------
-ALIGN = {
-    1: "right",   # Høyde (first data column after Tid)
-    2: "center",
-    3: "left",
-    4: "right",
-    5: "center",
-    6: "left",
-    7: "center",
-    8: "right",
-    9: "left",
-    10: "right",
-    11: "left",
-    12: "center",
-    13: "center",
-    14: "center",
-    15: "center",
-}
-
-def col_align(i):
-    return ALIGN.get(i, "center")
 
 # ---------------------------------------------
 # HTML + CSS TABLE
@@ -65,6 +40,14 @@ html = f"""
     background: #f4f4f4;
 }}
 
+/* Wider table on larger screens (~2/3 viewport width) */
+@media (min-width: 1024px) {{
+    .sticky-table-container {{
+        max-width: 66vw;
+        margin: 0 auto;
+    }}
+}}
+
 .sticky-table {{
     width: 100%;
     border-collapse: collapse;
@@ -74,6 +57,7 @@ html = f"""
 .sticky-table th,
 .sticky-table td {{
     padding: 8px;
+    text-align: center;
     vertical-align: middle;
     min-width: 60px;
     background: #f7f7f7;
@@ -152,26 +136,50 @@ html = f"""
 </tr>
 
 <tr class="header-sub">
-    <th style="text-align:{col_align(1)}">(m)</th>
-    <th style="text-align:{col_align(2)}">(s)</th>
-    <th style="text-align:{col_align(3)}"> </th>
-    <th style="text-align:{col_align(4)}">(m)</th>
-    <th style="text-align:{col_align(5)}">(s)</th>
-    <th style="text-align:{col_align(6)}"> </th>
-    <th style="text-align:{col_align(7)}">(s)</th>
-    <th style="text-align:{col_align(8)}">(m/s)</th>
-    <th style="text-align:{col_align(9)}"> </th>
-    <th style="text-align:{col_align(10)}">(m/s)</th>
-    <th style="text-align:{col_align(11)}"></th>
-    <th style="text-align:{col_align(12)}">Luft</th>
-    <th style="text-align:{col_align(13)}">Sjø</th>
-    <th style="text-align:{col_align(14)}">(%)</th>
-    <th style="text-align:{col_align(15)}">(mm)</th>
+    <th>(m)</th>
+    <th>(s)</th>
+    <th> </th>
+    <th>(m)</th>
+    <th>(s)</th>
+    <th> </th>
+    <th>(s)</th>
+    <th>(m/s)</th>
+    <th> </th>
+    <th>(m/s)</th>
+    <th></th>
+    <th>Luft</th>
+    <th>Sjø</th>
+    <th>(%)</th>
+    <th>(mm)</th>
 </tr>
 </thead>
 
 <tbody>
 """
+
+# ----------------------------------------
+# Alignment rules (index-based)
+# ----------------------------------------
+ALIGN = {
+    1: "right",   # Høyde (first data column after Tid)
+    2: "center",
+    3: "left",
+    4: "right",
+    5: "center",
+    6: "left",
+    7: "center",
+    8: "right",
+    9: "left",
+    10: "right",
+    11: "left",
+    12: "center",
+    13: "center",
+    14: "center",
+    15: "center",
+}
+
+def col_align(i):
+    return ALIGN.get(i, "center")
 
 # ----------------------------------------
 # INSERT ROWS + DAY CHANGE SEPARATORS
