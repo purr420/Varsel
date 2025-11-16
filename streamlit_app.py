@@ -20,7 +20,6 @@ MONTH_NO = ["jan", "feb", "mar", "apr", "mai", "jun",
 # Build enough rows to cover day change
 rows = []
 current_datetime = now - timedelta(hours=2)
-
 for i in range(36):
     hour_str = current_datetime.strftime("%H")
     rows.append({
@@ -34,36 +33,27 @@ for i in range(36):
 # ---------------------------------------------
 html = f"""
 <style>
+/* Table container */
 .sticky-table-container {{
     max-height: 650px;
     overflow: auto;
-    border-radius: 6px;
     background: #f4f4f4;
 }}
 
-/* Wider table on desktop (~2/3 viewport) */
+/* Desktop: wider container */
 @media (min-width: 1024px) {{
     .sticky-table-container {{
-        max-width: 66vw;
-        margin: 0 auto;
-    }}
-    .sticky-table {{
-        width: 100%;
-        table-layout: fixed;
+        width: 66vw;  /* 2/3 of screen width */
+        margin: 0 auto;  /* center */
     }}
 }}
 
-/* Full width on smaller screens */
-@media (max-width: 1023px) {{
-    .sticky-table {{
-        width: 100%;
-        table-layout: auto;
-    }}
-}}
-
+/* Table styling */
 .sticky-table {{
+    width: 100%;
     border-collapse: collapse;
     background: #f7f7f7;
+    table-layout: fixed; /* ensures columns stretch properly */
 }}
 
 .sticky-table th,
@@ -94,7 +84,7 @@ html = f"""
     top: 0;
 }}
 .sticky-table thead tr:nth-child(2) th {{
-    top: 36px;  /* prevent gap between sticky rows */
+    top: 36px;
 }}
 
 /* Sticky first column */
@@ -110,12 +100,12 @@ html = f"""
     z-index: 30 !important;
 }}
 
-/* Day separator row same color as table */
+/* Day separator row */
 .day-separator td:first-child {{
-    background: #ececec !important;  /* first column color */
+    background: #ececec !important;
 }}
 .day-separator td[colspan] {{
-    background: #f7f7f7 !important;  /* same as table cells */
+    background: #f7f7f7 !important;
     text-align: left;
     padding-left: 12px;
     font-weight: bold;
@@ -168,11 +158,9 @@ html = f"""
 <tbody>
 """
 
-# ----------------------------------------
 # Alignment rules (index-based)
-# ----------------------------------------
 ALIGN = {
-    1: "right",   # Høyde (first data column after Tid)
+    1: "right",
     2: "center",
     3: "left",
     4: "right",
@@ -192,26 +180,18 @@ ALIGN = {
 def col_align(i):
     return ALIGN.get(i, "center")
 
-# ----------------------------------------
-# INSERT ROWS + DAY CHANGE SEPARATORS
-# ----------------------------------------
+# Insert rows + day separator
 last_date = None
-
 for r in rows:
     dt = r["datetime"]
     this_date = dt.date()
 
     if last_date is not None and this_date != last_date:
-        # Determine label
         day_diff = (this_date - now.date()).days
         day = dt.day
         month = MONTH_NO[dt.month - 1]
         weekday = WEEKDAY_NO[dt.weekday()]
-
-        if day_diff == 1:
-            label = f"I morgen {day}. {month}"
-        else:
-            label = f"{weekday} {day}. {month}"
+        label = f"I morgen {day}. {month}" if day_diff == 1 else f"{weekday} {day}. {month}"
 
         html += f"""
         <tr class="day-separator">
@@ -225,22 +205,14 @@ for r in rows:
     # Normal row
     html += "<tr>"
     html += f"<td>{r['hour']}</td>"
-
-    # Data columns with alignment
     for i in range(1, 16):
         align = col_align(i)
         html += f'<td style="text-align:{align}">-</td>'
-
     html += "</tr>"
 
-html += """
-</tbody>
-</table>
-</div>
-"""
+html += "</tbody></table></div>"
 
 # Debug
 st.write(f"**Oslo:** {now.strftime('%H:%M %d.%m.%Y')}")
 
-# Render table
 st.components.v1.html(html, height=700)
