@@ -54,23 +54,19 @@ def col_align(i):
 # ---------------------------------------------
 html = f"""
 <style>
-/* Table container */
 .sticky-table-container {{
     max-height: 650px;
     overflow: auto;
+    border-radius: 6px;
     background: #f4f4f4;
-    width: 95vw;           /* fill ~95% of screen width */
-    margin: 0 auto;        /* center horizontally */
 }}
 
-/* Table styling */
 .sticky-table {{
-    width: 100%;            /* table fills container */
+    width: 100%;
     border-collapse: collapse;
     background: #f7f7f7;
 }}
 
-/* Cells */
 .sticky-table th,
 .sticky-table td {{
     padding: 8px;
@@ -88,7 +84,7 @@ html = f"""
     background: #ececec !important;
 }}
 
-/* Sticky headers */
+/* Sticky header rows */
 .sticky-table thead th {{
     position: sticky;
     background: #ececec;
@@ -98,7 +94,7 @@ html = f"""
     top: 0;
 }}
 .sticky-table thead tr:nth-child(2) th {{
-    top: 36px;
+    top: 36px;  /* fixed row height to prevent gap */
 }}
 
 /* Sticky first column */
@@ -110,16 +106,17 @@ html = f"""
     z-index: 20;
     font-weight: bold;
 }}
+
 .sticky-table thead tr:first-child th:first-child {{
     z-index: 30 !important;
 }}
 
 /* Day separator row */
 .day-separator td:first-child {{
-    background: #ececec !important;
+    background: #ececec !important;  /* same as first column */
 }}
 .day-separator td[colspan] {{
-    background: #f7f7f7 !important;
+    background: #f7f7f7 !important;  /* same as table cells */
     text-align: left;
     padding-left: 12px;
     font-weight: bold;
@@ -129,7 +126,7 @@ html = f"""
 @media (min-width: 768px) {{
     .sticky-table thead th[rowspan] {{
         top: 0 !important;
-        z-index: 12 !important;
+        z-index: 12 !important;  /* above second row, but below corner cell */
     }}
 }}
 </style>
