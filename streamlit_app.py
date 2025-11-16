@@ -120,30 +120,30 @@ html = f"""
     <th rowspan="2">Tid</th>
     <th colspan="3">Swell</th>
     <th colspan="3">Vindbølger</th>
-    <th>Periode</th>
-    <th colspan="2">yr Vind(kast)</th>
-    <th colspan="2">dmi Vind(kast)</th>
-    <th colspan="2">Temperatur</th>
+    <th> </th>
+    <th colspan="2">yr Vind (m/s)</th>
+    <th colspan="2">dmi Vind (m/s)</th>
+    <th colspan="2">Temp (°C)</th>
     <th>Skydekke</th>
     <th>Nedbør</th>
 </tr>
 
 <tr class="header-sub">
-    <th>Høyde</th>
-    <th>Periode</th>
+    <th>H (m)</th>
+    <th>P (s)</th>
     <th>Retning</th>
-    <th>Høyde</th>
-    <th>Periode</th>
+    <th>H (m)</th>
+    <th>P (s)</th>
     <th>Retning</th>
-    <th>dominant</th>
+    <th>P.dom. (s)</th>
     <th>Styrke</th>
     <th>Retning</th>
     <th>Styrke</th>
     <th>Retning</th>
-    <th>Land</th>
-    <th>Hav</th>
-    <th>Skydekke</th>
-    <th>Nedbør</th>
+    <th>Luft</th>
+    <th>Sjø</th>
+    <th>(%)</th>
+    <th>(mm)</th>
 </tr>
 </thead>
 
