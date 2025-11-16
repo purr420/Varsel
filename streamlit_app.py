@@ -1,212 +1,185 @@
 import streamlit as st
-import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-# -----------------------------
-# CONFIG
-# -----------------------------
+st.title("Weather Table – Day Separator + Clean Style")
 
-st.set_page_config(layout="wide")
-st.title("Weather Table – Norwegian Date Separators & Clean Layout")
-
+# Get current Oslo time
 oslo_tz = pytz.timezone('Europe/Oslo')
 now = datetime.now(oslo_tz)
+current_hour = now.hour
 
-# Norwegian weekday names (weekday(): Monday=0)
-WEEKDAY_NO = ["Mandag", "Tirsdag", "Onsdag", "Torsdag",
-              "Fredag", "Lørdag", "Søndag"]
+# Start 2 hours before current hour
+start_hour = (current_hour - 2) % 24
 
-# Norwegian month abbreviations
-MONTHS_NO = ["jan", "feb", "mar", "apr", "mai", "jun",
-             "jul", "aug", "sep", "okt", "nov", "des"]
+# Build 48 hours to ensure a day change happens
+rows = []
+current_datetime = now - timedelta(hours=2)
 
-# -----------------------------
-# TIME ROWS GENERATION (48h sample for demo)
-# -----------------------------
+for i in range(36):  # Enough to cover today + tomorrow morning
+    hour_str = current_datetime.strftime("%H")
+    date_str = current_datetime.strftime("%d. %b")
+    weekday = current_datetime.strftime("%A")
 
-hours = []
-for i in range(48):  # 48 hours ahead to ensure several day changes
-    t = now + timedelta(hours=i)
-    hours.append(t)
+    rows.append({
+        "hour": hour_str,
+        "date": date_str,
+        "weekday": weekday,
+        "datetime": current_datetime
+    })
 
-# -----------------------------
-# TABLE HEADER STRUCTURE
-# -----------------------------
+    current_datetime += timedelta(hours=1)
 
-header_row_1 = [
-    ("Tid", 1, 2),
-    ("Swell", 3, 1),
-    ("Vindbølger", 3, 1),
-    ("Periode", 1, 1),
-    ("yr Vind(kast)", 2, 1),
-    ("dmi Vind(kast)", 2, 1),
-    ("Temperatur", 2, 1),
-    ("Skydekke", 1, 2),
-    ("Nedbør", 1, 2),
-]
-
-header_row_2 = [
-    "Høyde", "Periode", "Retning",
-    "Høyde", "Periode", "Retning",
-    "dominant",
-    "Styrke", "Retning",
-    "Styrke", "Retning",
-    "Land", "Hav",
-]
-
-# Total columns = 16 including Tid
-total_columns = 16
-
-# -----------------------------
-# COLUMN ALIGNMENT RULES
-# a:c,b:r,c:c,d:l,e:r,f:c,g:l,h:c,i:r,j:l,k:r,l:l, rest c
-# Columns are 0-indexed (Tid = col 0)
-# -----------------------------
-
-ALIGN = {
-    0: "center",   # Tid
-    1: "right",
-    2: "center",
-    3: "left",
-    4: "right",
-    5: "center",
-    6: "left",
-    7: "center",
-    8: "right",
-    9: "left",
-    10: "right",
-    11: "left",
-    12: "left",
-}
-
-def get_align(col):
-    return ALIGN.get(col, "center")
-
-# -----------------------------
-# HTML + CSS START
-# -----------------------------
-
+# ---------------------------------------------
+# HTML + CSS TABLE
+# ---------------------------------------------
 html = f"""
 <style>
-.sticky-container {{
+.sticky-table-container {{
     max-height: 650px;
     overflow: auto;
-    background: #f5f5f5;
+    border-radius: 6px;
+    background: #f4f4f4;
 }}
 
-.table {{
+.sticky-table {{
     width: 100%;
     border-collapse: collapse;
-    background: #fafafa;
+    background: #f7f7f7;  /* soft background */
 }}
 
-.table th,
-.table td {{
-    padding: 6px 8px;
-    background: #fafafa;
+.sticky-table th,
+.sticky-table td {{
+    padding: 8px;
+    text-align: center;
+    vertical-align: middle;
+    min-width: 60px;
+    background: #f7f7f7;
+    border: none;
 }}
 
-.table thead th {{
+/* Header rows - slightly darker */
+.header-top {{
+    background: #ececec !important;
+}}
+.header-sub {{
+    background: #ececec !important;
+}}
+
+/* Sticky header rows */
+.sticky-table thead th {{
     position: sticky;
+    background: #ececec;
+    z-index: 10;
+}}
+.sticky-table thead tr:first-child th {{
     top: 0;
-    background: #e6e6e6; /* subtle darker header */
+}}
+.sticky-table thead tr:nth-child(2) th {{
+    top: 40px;
+}}
+
+/* Sticky first column */
+.sticky-table td:first-child,
+.sticky-table th:first-child {{
+    position: sticky;
+    left: 0;
+    background: #ececec;
     z-index: 20;
     font-weight: bold;
 }}
 
-.table thead tr:nth-child(2) th {{
-    top: 32px; /* second header row */
+/* Top-left corner (Tid) */
+.sticky-table thead tr:first-child th:first-child {{
+    z-index: 30 !important;
 }}
 
-.table td:first-child,
-.table th:first-child {{
-    position: sticky;
-    left: 0;
-    background: #e6e6e6; /* same for first column */
-    z-index: 25;
+/* Day separator row */
+.day-separator {{
+    background: #e0e0e0 !important;
     font-weight: bold;
 }}
-
-.separator-row td {{
-    background: #fafafa !important;
-    font-weight: bold;
-    text-align: left !important;
-    padding-left: 12px;
+.day-separator td {{
+    background: #e0e0e0 !important;
 }}
-
 </style>
 
-<div class="sticky-container">
-<table class="table">
+<div class="sticky-table-container">
+<table class="sticky-table">
 
 <thead>
-<tr>
+<tr class="header-top">
+    <th rowspan="2">Tid</th>
+    <th colspan="3">Swell</th>
+    <th colspan="3">Vindbølger</th>
+    <th>Periode</th>
+    <th colspan="2">yr Vind(kast)</th>
+    <th colspan="2">dmi Vind(kast)</th>
+    <th colspan="2">Temperatur</th>
+    <th rowspan="2">Skydekke</th>
+    <th rowspan="2">Nedbør</th>
+</tr>
+
+<tr class="header-sub">
+    <th>Høyde</th>
+    <th>Periode</th>
+    <th>Retning</th>
+    <th>Høyde</th>
+    <th>Periode</th>
+    <th>Retning</th>
+    <th>dominant</th>
+    <th>Styrke</th>
+    <th>Retning</th>
+    <th>Styrke</th>
+    <th>Retning</th>
+    <th>Land</th>
+    <th>Hav</th>
+</tr>
+</thead>
+
+<tbody>
 """
 
-# First header row
-for label, colspan, rowspan in header_row_1:
-    html += f'<th colspan="{colspan}" rowspan="{rowspan}">{label}</th>'
+# ----------------------------------------
+# INSERT ROWS + DAY CHANGE SEPARATORS
+# ----------------------------------------
+last_date = None
 
-html += "</tr><tr>"
+for r in rows:
+    this_date = r["datetime"].date()
 
-# Second header row
-for label in header_row_2:
-    html += f"<th>{label}</th>"
+    # Insert day separator when date changes
+    if last_date is not None and this_date != last_date:
 
-html += "</tr></thead><tbody>"
-
-# -----------------------------
-# BUILD BODY WITH DAY SEPARATORS
-# -----------------------------
-
-current_day = hours[0].date()
-
-for dt in hours:
-    day = dt.date()
-
-    if day != current_day:
-        # INSERT SEPARATOR ROW
-
-        day_index = (day - now.date()).days
-
-        # Tomorrow → special case
-        if day_index == 1:
-            text = f"I morgen {day.day}. {MONTHS_NO[day.month-1]}"
+        tomorrow_label = ""
+        if this_date == (now + timedelta(days=1)).date():
+            tomorrow_label = f"I morgen ({r['datetime'].strftime('%d. %b')})"
         else:
-            weekday = WEEKDAY_NO[day.weekday()]
-            text = f"{weekday} {day.day}. {MONTHS_NO[day.month-1]}"
+            tomorrow_label = r["datetime"].strftime("%d. %b")
 
-        # first column blank, columns 2–16 merged
         html += f"""
-        <tr class="separator-row">
+        <tr class="day-separator">
             <td></td>
-            <td colspan="{total_columns - 1}">{text}</td>
+            <td colspan="15">{tomorrow_label}</td>
         </tr>
         """
 
-        current_day = day
+    last_date = this_date
 
-    # NORMAL HOURLY ROW
-    time_str = dt.strftime("%H")
-
+    # Add normal hourly row
     html += "<tr>"
-
-    # First column
-    html += f'<td style="text-align:center">{time_str}</td>'
-
-    # Data columns (fake dashes)
-    for col in range(1, total_columns):
-        align = get_align(col)
-        html += f'<td style="text-align:{align}">-</td>'
-
+    html += f"<td>{r['hour']}</td>"
+    html += "".join("<td>-</td>" for _ in range(15))
     html += "</tr>"
 
-html += "</tbody></table></div>"
+html += """
+</tbody>
+</table>
+</div>
+"""
 
-# -----------------------------
-# RENDER
-# -----------------------------
+# Show debug text
+st.write(f"**Oslo:** {now.strftime('%H:%M %d.%m %Y')}")
 
-st.components.v1.html(html, height=700, scrolling=True)
-
+# Render the table
+st.components.v1.html(html, height=700)
