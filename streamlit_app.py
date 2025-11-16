@@ -71,20 +71,11 @@ html = f"""
     background: #ececec;
     z-index: 10;
 }}
-
-/* Fix rowspan headers alignment */
-.sticky-table thead th[rowspan] {{
-    top: 0 !important;
-}}
-
-/* Top row */
 .sticky-table thead tr:first-child th {{
     top: 0;
 }}
-/* Second row */
 .sticky-table thead tr:nth-child(2) th {{
-    top: 36px;  /* matches first row height, tweak if needed */
-    z-index: 11;
+    top: 36px;  /* fixed row height to prevent gap */
 }}
 
 /* Sticky first column */
@@ -97,7 +88,6 @@ html = f"""
     font-weight: bold;
 }}
 
-/* Top-left corner (Tid) */
 .sticky-table thead tr:first-child th:first-child {{
     z-index: 30 !important;
 }}
@@ -114,12 +104,12 @@ html = f"""
 }}
 
 /* Fix rowspan header alignment on desktop */
-@media (min-width: 768px) {
-    .sticky-table thead th[rowspan] {
+@media (min-width: 768px) {{
+    .sticky-table thead th[rowspan] {{
         top: 0 !important;
         z-index: 12 !important;  /* above second row, but below corner cell */
-    }
-}
+    }}
+}}
 </style>
 
 <div class="sticky-table-container">
