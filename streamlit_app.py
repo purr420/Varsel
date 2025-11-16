@@ -20,6 +20,7 @@ MONTH_NO = ["jan", "feb", "mar", "apr", "mai", "jun",
 # Build enough rows to cover day change
 rows = []
 current_datetime = now - timedelta(hours=2)
+
 for i in range(36):
     hour_str = current_datetime.strftime("%H")
     rows.append({
@@ -28,38 +29,51 @@ for i in range(36):
     })
     current_datetime += timedelta(hours=1)
 
+# ----------------------------------------
+# Alignment rules (index-based)
+# ----------------------------------------
+ALIGN = {
+    1: "right",   # Høyde (first data column after Tid)
+    2: "center",
+    3: "left",
+    4: "right",
+    5: "center",
+    6: "left",
+    7: "center",
+    8: "right",
+    9: "left",
+    10: "right",
+    11: "left",
+    12: "center",
+    13: "center",
+    14: "center",
+    15: "center",
+}
+
+def col_align(i):
+    return ALIGN.get(i, "center")
+
 # ---------------------------------------------
 # HTML + CSS TABLE
 # ---------------------------------------------
 html = f"""
 <style>
-/* Table container */
 .sticky-table-container {{
     max-height: 650px;
     overflow: auto;
+    border-radius: 6px;
     background: #f4f4f4;
 }}
 
-/* Desktop: wider container */
-@media (min-width: 1024px) {{
-    .sticky-table-container {{
-        width: 66vw;  /* 2/3 of screen width */
-        margin: 0 auto;  /* center */
-    }}
-}}
-
-/* Table styling */
 .sticky-table {{
     width: 100%;
     border-collapse: collapse;
     background: #f7f7f7;
-    table-layout: fixed; /* ensures columns stretch properly */
 }}
 
 .sticky-table th,
 .sticky-table td {{
     padding: 8px;
-    text-align: center;
     vertical-align: middle;
     min-width: 60px;
     background: #f7f7f7;
@@ -84,7 +98,7 @@ html = f"""
     top: 0;
 }}
 .sticky-table thead tr:nth-child(2) th {{
-    top: 36px;
+    top: 36px;  /* fixed row height to prevent gap */
 }}
 
 /* Sticky first column */
@@ -96,16 +110,17 @@ html = f"""
     z-index: 20;
     font-weight: bold;
 }}
+
 .sticky-table thead tr:first-child th:first-child {{
     z-index: 30 !important;
 }}
 
 /* Day separator row */
 .day-separator td:first-child {{
-    background: #ececec !important;
+    background: #ececec !important;  /* same as first column */
 }}
 .day-separator td[colspan] {{
-    background: #f7f7f7 !important;
+    background: #f7f7f7 !important;  /* same as table cells */
     text-align: left;
     padding-left: 12px;
     font-weight: bold;
@@ -115,7 +130,7 @@ html = f"""
 @media (min-width: 768px) {{
     .sticky-table thead th[rowspan] {{
         top: 0 !important;
-        z-index: 12 !important;
+        z-index: 12 !important;  /* above second row, but below corner cell */
     }}
 }}
 </style>
@@ -137,61 +152,48 @@ html = f"""
 </tr>
 
 <tr class="header-sub">
-    <th style="text-align:right">(m)</th>
-    <th style="text-align:center">(s)</th>
-    <th style="text-align:left"> </th>
-    <th style="text-align:right">(m)</th>
-    <th style="text-align:center">(s)</th>
-    <th style="text-align:left"> </th>
-    <th style="text-align:center">(s)</th>
-    <th style="text-align:right">(m/s)</th>
-    <th style="text-align:left"> </th>
-    <th style="text-align:right">(m/s)</th>
-    <th style="text-align:left"></th>
-    <th style="text-align:center">Luft</th>
-    <th style="text-align:center">Sjø</th>
-    <th style="text-align:center">%</th>
-    <th style="text-align:center">mm</th>
+    <th style="text-align:{col_align(1)}">(m)</th>
+    <th style="text-align:{col_align(2)}">(s)</th>
+    <th style="text-align:{col_align(3)}"> </th>
+    <th style="text-align:{col_align(4)}">(m)</th>
+    <th style="text-align:{col_align(5)}">(s)</th>
+    <th style="text-align:{col_align(6)}"> </th>
+    <th style="text-align:{col_align(7)}">(s)</th>
+    <th style="text-align:{col_align(8)}">(m/s)</th>
+    <th style="text-align:{col_align(9)}"> </th>
+    <th style="text-align:{col_align(10)}">(m/s)</th>
+    <th style="text-align:{col_align(11)}"></th>
+    <th style="text-align:{col_align(12)}">Luft</th>
+    <th style="text-align:{col_align(13)}">Sjø</th>
+    <th style="text-align:{col_align(14)}">(%)</th>
+    <th style="text-align:{col_align(15)}">(mm)</th>
 </tr>
 </thead>
 
 <tbody>
 """
 
-# Alignment rules (index-based)
-ALIGN = {
-    1: "right",
-    2: "center",
-    3: "left",
-    4: "right",
-    5: "center",
-    6: "left",
-    7: "center",
-    8: "right",
-    9: "left",
-    10: "right",
-    11: "left",
-    12: "center",
-    13: "center",
-    14: "center",
-    15: "center",
-}
-
-def col_align(i):
-    return ALIGN.get(i, "center")
-
-# Insert rows + day separator
+# ----------------------------------------
+# INSERT ROWS + DAY CHANGE SEPARATORS
+# ----------------------------------------
 last_date = None
+
 for r in rows:
     dt = r["datetime"]
     this_date = dt.date()
 
     if last_date is not None and this_date != last_date:
+
+        # Determine label
         day_diff = (this_date - now.date()).days
         day = dt.day
         month = MONTH_NO[dt.month - 1]
         weekday = WEEKDAY_NO[dt.weekday()]
-        label = f"I morgen {day}. {month}" if day_diff == 1 else f"{weekday} {day}. {month}"
+
+        if day_diff == 1:
+            label = f"I morgen {day}. {month}"
+        else:
+            label = f"{weekday} {day}. {month}"
 
         html += f"""
         <tr class="day-separator">
@@ -205,14 +207,22 @@ for r in rows:
     # Normal row
     html += "<tr>"
     html += f"<td>{r['hour']}</td>"
+
+    # Data columns with alignment
     for i in range(1, 16):
         align = col_align(i)
         html += f'<td style="text-align:{align}">-</td>'
+
     html += "</tr>"
 
-html += "</tbody></table></div>"
+html += """
+</tbody>
+</table>
+</div>
+"""
 
 # Debug
 st.write(f"**Oslo:** {now.strftime('%H:%M %d.%m.%Y')}")
 
+# Render table
 st.components.v1.html(html, height=700)
