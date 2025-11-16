@@ -20,6 +20,7 @@ MONTH_NO = ["jan", "feb", "mar", "apr", "mai", "jun",
 # Build enough rows to cover day change
 rows = []
 current_datetime = now - timedelta(hours=2)
+
 for i in range(36):
     hour_str = current_datetime.strftime("%H")
     rows.append({
@@ -40,16 +41,27 @@ html = f"""
     background: #f4f4f4;
 }}
 
-/* Wider table on larger screens (~2/3 viewport width) */
+/* Wider table on desktop (~2/3 viewport) */
 @media (min-width: 1024px) {{
     .sticky-table-container {{
         max-width: 66vw;
         margin: 0 auto;
     }}
+    .sticky-table {{
+        width: 100%;
+        table-layout: fixed;
+    }}
+}}
+
+/* Full width on smaller screens */
+@media (max-width: 1023px) {{
+    .sticky-table {{
+        width: 100%;
+        table-layout: auto;
+    }}
 }}
 
 .sticky-table {{
-    width: 100%;
     border-collapse: collapse;
     background: #f7f7f7;
 }}
@@ -82,7 +94,7 @@ html = f"""
     top: 0;
 }}
 .sticky-table thead tr:nth-child(2) th {{
-    top: 36px;  /* fixed row height to prevent gap */
+    top: 36px;  /* prevent gap between sticky rows */
 }}
 
 /* Sticky first column */
@@ -94,14 +106,13 @@ html = f"""
     z-index: 20;
     font-weight: bold;
 }}
-
 .sticky-table thead tr:first-child th:first-child {{
     z-index: 30 !important;
 }}
 
-/* Day separator row */
+/* Day separator row same color as table */
 .day-separator td:first-child {{
-    background: #ececec !important;  /* same as first column */
+    background: #ececec !important;  /* first column color */
 }}
 .day-separator td[colspan] {{
     background: #f7f7f7 !important;  /* same as table cells */
@@ -114,7 +125,7 @@ html = f"""
 @media (min-width: 768px) {{
     .sticky-table thead th[rowspan] {{
         top: 0 !important;
-        z-index: 12 !important;  /* above second row, but below corner cell */
+        z-index: 12 !important;
     }}
 }}
 </style>
@@ -136,21 +147,21 @@ html = f"""
 </tr>
 
 <tr class="header-sub">
-    <th>(m)</th>
-    <th>(s)</th>
-    <th> </th>
-    <th>(m)</th>
-    <th>(s)</th>
-    <th> </th>
-    <th>(s)</th>
-    <th>(m/s)</th>
-    <th> </th>
-    <th>(m/s)</th>
-    <th></th>
-    <th>Luft</th>
-    <th>Sjø</th>
-    <th>(%)</th>
-    <th>(mm)</th>
+    <th style="text-align:right">(m)</th>
+    <th style="text-align:center">(s)</th>
+    <th style="text-align:left"> </th>
+    <th style="text-align:right">(m)</th>
+    <th style="text-align:center">(s)</th>
+    <th style="text-align:left"> </th>
+    <th style="text-align:center">(s)</th>
+    <th style="text-align:right">(m/s)</th>
+    <th style="text-align:left"> </th>
+    <th style="text-align:right">(m/s)</th>
+    <th style="text-align:left"></th>
+    <th style="text-align:center">Luft</th>
+    <th style="text-align:center">Sjø</th>
+    <th style="text-align:center">%</th>
+    <th style="text-align:center">mm</th>
 </tr>
 </thead>
 
@@ -191,7 +202,6 @@ for r in rows:
     this_date = dt.date()
 
     if last_date is not None and this_date != last_date:
-
         # Determine label
         day_diff = (this_date - now.date()).days
         day = dt.day
