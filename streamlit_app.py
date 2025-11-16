@@ -112,6 +112,14 @@ html = f"""
     padding-left: 12px;
     font-weight: bold;
 }}
+
+/* Fix rowspan header alignment on desktop */
+@media (min-width: 768px) {
+    .sticky-table thead th[rowspan] {
+        top: 0 !important;
+        z-index: 12 !important;  /* above second row, but below corner cell */
+    }
+}
 </style>
 
 <div class="sticky-table-container">
