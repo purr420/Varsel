@@ -93,14 +93,14 @@ html = f"""
 }}
 
 /* Day separator row */
-.day-separator {{
-    background: #e0e0e0 !important;
-    font-weight: bold;
+.day-separator td:first-child {{
+    background: #ececec !important;  /* same as first column */
 }}
-.day-separator td {{
-    background: #e0e0e0 !important;
-    text-align: left !important;
+.day-separator td[colspan] {{
+    background: #f7f7f7 !important;  /* same as table cells */
+    text-align: left;
     padding-left: 12px;
+    font-weight: bold;
 }}
 </style>
 
@@ -141,35 +141,32 @@ html = f"""
 """
 
 # ----------------------------------------
-# Alignment rules (index-based) — FIXED (Høyde is first data col i=1)
+# Alignment rules (index-based)
 # ----------------------------------------
 ALIGN = {
-    1: "right",   # Høyde  (first data column after Tid) -> RIGHT
-    2: "center",  # Periode
-    3: "left",    # Retning
-    4: "right",   # Vindbølger Høyde
-    5: "center",  # Vindbølger Periode
-    6: "left",    # Vindbølger Retning
-    7: "center",  # dominant
-    8: "right",   # yr Styrke
-    9: "left",    # yr Retning
-    10: "right",  # dmi Styrke
-    11: "left",   # dmi Retning
-    12: "center", # Temperatur Land (or first temp col)
-    13: "center", # Temperatur Hav (or second temp col)
-    14: "center", # Skydekke
-    15: "center", # Nedbør
+    1: "right",   # Høyde (first data column after Tid)
+    2: "center",
+    3: "left",
+    4: "right",
+    5: "center",
+    6: "left",
+    7: "center",
+    8: "right",
+    9: "left",
+    10: "right",
+    11: "left",
+    12: "center",
+    13: "center",
+    14: "center",
+    15: "center",
 }
 
 def col_align(i):
     return ALIGN.get(i, "center")
 
-
-
 # ----------------------------------------
 # INSERT ROWS + DAY CHANGE SEPARATORS
 # ----------------------------------------
-
 last_date = None
 
 for r in rows:
