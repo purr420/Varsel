@@ -124,8 +124,8 @@ html = f"""
     <th colspan="2">yr Vind(kast)</th>
     <th colspan="2">dmi Vind(kast)</th>
     <th colspan="2">Temperatur</th>
-    <th rowspan="2">Skydekke</th>
-    <th rowspan="2">Nedbør</th>
+    <th>Skydekke</th>
+    <th>Nedbør</th>
 </tr>
 
 <tr class="header-sub">
@@ -142,6 +142,8 @@ html = f"""
     <th>Retning</th>
     <th>Land</th>
     <th>Hav</th>
+    <th>Skydekke</th>
+    <th>Nedbør</th>
 </tr>
 </thead>
 
