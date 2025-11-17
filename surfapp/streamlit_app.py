@@ -254,6 +254,19 @@ html = f"""
     border: none;
 }}
 
+/* Soften all header cells */
+.sticky-table th {{
+    font-weight: normal;
+    opacity: 1;
+}}
+
+/* Units row like (m), (s), (%) */
+.header-sub th {{
+    font-weight: normal;
+    opacity: 0.75;
+}}
+
+
 /* Header rows */
 .header-top {{
     background: #ececec !important;
