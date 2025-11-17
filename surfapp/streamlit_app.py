@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 import pytz
 
 from modules.daylight import load_daylight_table, get_light_times
@@ -16,68 +16,8 @@ DAYLIGHT = load_daylight_table()
 now_utc = datetime.now(UTC)
 now_oslo = now_utc.astimezone(OSLO_TZ)
 
-# ---- Light times for header (string versions) ----
+# ---- Light times ----
 light = get_light_times(now_utc, DAYLIGHT)
-
-# ---------------------------------------------------
-#  Helpers to work with daylight table per date
-# ---------------------------------------------------
-
-def get_light_oslo_for_date(d: date):
-    """
-    Return (first_light_oslo, last_light_oslo) as aware datetimes in Oslo time
-    for the given calendar date d, using the UTC daylight table.
-    """
-    # Table key is d(d).mm, e.g. "1.01", "18.11"
-    date_key = f"{d.day}.{d.month:02d}".lstrip("0")
-    row = DAYLIGHT.loc[DAYLIGHT["Dato"].astype(str).str.strip() == date_key]
-
-    if row.empty:
-        return None, None
-
-    row = row.iloc[0]
-
-    def parse_utc_to_oslo(clock_str: str):
-        if not isinstance(clock_str, str) or ":" not in clock_str:
-            return None
-        h, m = map(int, clock_str.split(":"))
-        dt_utc = datetime(d.year, d.month, d.day, h, m, tzinfo=UTC)
-        return dt_utc.astimezone(OSLO_TZ)
-
-    first = parse_utc_to_oslo(row["First_surf_start_UTC"])
-    last = parse_utc_to_oslo(row["Last_surf_end_UTC"])
-    return first, last
-
-
-def compute_day_window(d: date):
-    """
-    For a given day d, compute the local (Oslo) start and end datetimes
-    for the forecast table based on first/last light.
-
-    - Day starts at: floor(first_light_hour) - 2 hours
-    - Day ends at: ceil(last_light_hour) (one full hour after if there are minutes)
-    """
-    first_light, last_light = get_light_oslo_for_date(d)
-    if first_light is None or last_light is None:
-        # Fallback: full day if we have no data
-        day_start = datetime(d.year, d.month, d.day, 0, 0, tzinfo=OSLO_TZ)
-        day_end = datetime(d.year, d.month, d.day, 23, 0, tzinfo=OSLO_TZ)
-        return day_start, day_end
-
-    # Floor first light to full hour, then subtract 2 hours
-    first_floor = first_light.replace(minute=0, second=0, microsecond=0)
-    day_start = first_floor - timedelta(hours=2)
-    if day_start.date() < d:
-        # If subtraction crosses midnight, clamp to this date at 00
-        day_start = datetime(d.year, d.month, d.day, 0, 0, tzinfo=OSLO_TZ)
-
-    # Last hour shown: one full hour after if there are minutes > 0
-    last_hour = last_light.hour + (1 if last_light.minute > 0 else 0)
-    if last_hour > 23:
-        last_hour = 23
-    day_end = datetime(d.year, d.month, d.day, last_hour, 0, tzinfo=OSLO_TZ)
-
-    return day_start, day_end
 
 
 # ---------------------------------------------------
@@ -95,14 +35,14 @@ st.markdown(
     font-size: 42px;
     font-weight: 800;
     line-height: 1.0;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }}
 
 .header-sub {{
     font-size: 26px;
     font-weight: 500;
     line-height: 1.0;
-    margin-top: 2px;
+    margin-top: -2px;
     margin-bottom: 4px;
 }}
 
@@ -129,7 +69,7 @@ st.markdown(
 </div>
 
 <div class="header-line">
-Lyst fra / til: <b>{light["first_light"]} / {light["last_light"]}</b>&nbsp;&nbsp;
+Lyst fra / til: <b>{light["first_light"]} / {light["last_light"]}</b> &nbsp;&nbsp;
 Sol opp / ned: <b>{light["sunrise"]} / {light["sunset"]}</b>
 </div>
 
@@ -140,77 +80,14 @@ Sol opp / ned: <b>{light["sunrise"]} / {light["sunset"]}</b>
 
 
 # ---------------------------------------------------
-#  BUILD DAY BLOCKS (TODAY / I MORGEN / +1)
+#  TIME ROWS FOR TABLE
 # ---------------------------------------------------
+start = now_oslo - timedelta(hours=2)
+rows = []
 
-today_date = now_oslo.date()
-
-# Light window for "calendar today" (for skip logic)
-first_today, last_today = get_light_oslo_for_date(today_date)
-
-# Decide if we skip today (more than 1 hour after last light)
-skip_today = False
-if last_today is not None:
-    if now_oslo > (last_today + timedelta(hours=1)):
-        skip_today = True
-
-# Base day: today (normal) or tomorrow (if we skip today)
-base_day = today_date if not skip_today else today_date + timedelta(days=1)
-
-# Prepare three days: base, base+1, base+2
-days = [base_day + timedelta(days=i) for i in range(3)]
-
-# Build blocks: each has a label and a list of hourly datetimes
-day_blocks = []
-
-now_floor = now_oslo.replace(minute=0, second=0, microsecond=0)
-
-for idx, d in enumerate(days):
-    day_start, day_end = compute_day_window(d)
-
-    # Special handling for the first block:
-    # - If it's really "today" and we did NOT skip today,
-    #   we start at max(day_start, now - 2h)
-    if idx == 0 and (d == today_date) and not skip_today:
-        candidate_start = now_floor - timedelta(hours=2)
-        if candidate_start < day_start:
-            start_time = day_start
-        else:
-            start_time = candidate_start
-    else:
-        # For all other days we always start at the daylight-based day_start
-        start_time = day_start
-
-    # Build the list of hours for this day
-    hours = []
-    t = start_time
-    while t <= day_end:
-        if t.tzinfo is None:
-            t = t.replace(tzinfo=OSLO_TZ)
-        if t.date() == d:
-            hours.append(t)
-        t += timedelta(hours=1)
-
-    if not hours:
-        continue
-
-    # Label logic:
-    # - Never label the block that is "today" when it's the first block
-    # - If the calendar day is tomorrow (today + 1) => "I morgen"
-    # - Otherwise => Weekday + date
-    if d == today_date and idx == 0 and not skip_today:
-        label = None
-    else:
-        if d == today_date + timedelta(days=1):
-            label = "I morgen"
-        else:
-            WEEKDAY_NO = ["Mandag", "Tirsdag", "Onsdag",
-                          "Torsdag", "Fredag", "Lørdag", "Søndag"]
-            weekday = WEEKDAY_NO[d.weekday()]
-            month_name = MONTHS_NO[d.month - 1]
-            label = f"{weekday} {d.day}. {month_name}"
-
-    day_blocks.append({"label": label, "hours": hours})
+for i in range(36):
+    rows.append({"hour": start.strftime("%H"), "datetime": start})
+    start += timedelta(hours=1)
 
 
 # ---------------------------------------------------
@@ -262,6 +139,17 @@ html = f"""
     background: #ececec !important;
 }}
 
+/* Make header text a bit lighter, and the unit row even lighter */
+.sticky-table thead th {{
+    font-weight: 500;
+}}
+.header-top th {{
+    font-weight: 600;
+}}
+.header-sub th {{
+    font-weight: 400;
+}}
+
 /* Sticky header rows */
 .sticky-table thead th {{
     position: sticky;
@@ -275,14 +163,14 @@ html = f"""
     top: 36px;
 }}
 
-/* Sticky first column */
+/* Sticky first column (Tid) – centered, not bold */
 .sticky-table td:first-child,
 .sticky-table th:first-child {{
     position: sticky;
     left: 0;
     background: #ececec;
     z-index: 20;
-    font-weight: bold;
+    text-align: center;
 }}
 
 .sticky-table thead tr:first-child th:first-child {{
@@ -297,7 +185,8 @@ html = f"""
     background: #f7f7f7 !important;
     text-align: left;
     padding-left: 12px;
-    font-weight: bold;
+    font-weight: 400;
+    font-size: 15px;
 }}
 
 /* Fix rowspan header alignment on desktop */
@@ -348,26 +237,37 @@ html = f"""
 <tbody>
 """
 
-# Insert blocks and rows
-for block in day_blocks:
-    label = block["label"]
-    hours = block["hours"]
+last_date = None
+MONTH_NO = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","des"]
+WEEKDAY_NO = ["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"]
 
-    if label:
+for r in rows:
+    dt = r["datetime"]
+    this_date = dt.date()
+
+    if last_date and this_date != last_date:
+        # Decide label: "I morgen" for tomorrow, weekday+date for others
+        day_diff = (this_date - now_oslo.date()).days
+        if day_diff == 1:
+            label = "I morgen"
+        else:
+            weekday = WEEKDAY_NO[dt.weekday()]
+            month = MONTH_NO[dt.month - 1]
+            label = f"{weekday} {dt.day}. {month}"
+
         html += f"""
         <tr class="day-separator">
             <td></td>
             <td colspan="15">{label}</td>
         </tr>
         """
+    last_date = this_date
 
-    for dt in hours:
-        hour_str = dt.strftime("%H")
-        html += "<tr>"
-        html += f"<td>{hour_str}</td>"
-        for i in range(1, 16):
-            html += f'<td style="text-align:{col_align(i)}">-</td>'
-        html += "</tr>"
+    html += "<tr>"
+    html += f"<td>{r['hour']}</td>"
+    for i in range(1, 16):
+        html += f'<td style="text-align:{col_align(i)}">-</td>'
+    html += "</tr>"
 
 html += "</tbody></table></div>"
 
