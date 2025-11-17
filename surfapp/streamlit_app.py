@@ -23,6 +23,11 @@ light = get_light_times(now_utc, DAYLIGHT)
 # ---------------------------------------------------
 #  HEADER
 # ---------------------------------------------------
+
+MONTHS_NO = ["jan", "feb", "mar", "apr", "mai", "jun",
+             "jul", "aug", "sep", "okt", "nov", "des"]
+month_no = MONTHS_NO[now_oslo.month - 1]
+
 st.markdown(
     f"""
 <style>
@@ -54,20 +59,24 @@ st.markdown(
 </style>
 
 <div class="header-title">Varselet</div>
+
 <div class="header-sub">
     for Lista
-    <span class="header-updated">(oppdatert {now_oslo.strftime("%H:%M %d. %b")})</span>
+    <span class="header-updated">
+        (oppdatert {now_oslo.strftime("%H:%M %d.")}{month_no})
+    </span>
 </div>
 
 <div class="header-line">
-<b>Lyst fra / til:</b> {light["first_light"]} / {light["last_light"]} &nbsp;&nbsp;
-<b>Sol opp / ned:</b> {light["sunrise"]} / {light["sunset"]}
+Lyst fra / til: <b>{light["first_light"]} / {light["last_light"]}</b> &nbsp;&nbsp;
+Sol opp / ned: <b>{light["sunrise"]} / {light["sunset"]}</b>
 </div>
 
 <hr>
 """,
     unsafe_allow_html=True
 )
+
 
 
 # ---------------------------------------------------
