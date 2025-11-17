@@ -37,6 +37,14 @@ st.markdown(f"""
 
 """, unsafe_allow_html=True)
 
+# ---- Weather table (your existing HTML table renderer) ----
+try:
+    html = load_weather_table_html(now_utc)   # if you have this
+    st.components.v1.html(html, height=700)
+except Exception:
+    st.warning("Weather table module not yet updated to UTC.")
+
+
 # ---------------------------------------------------
 # 6. TABELLKODEN (LIMT INN UENDRET FRA TIDLIGERE)
 # ---------------------------------------------------
