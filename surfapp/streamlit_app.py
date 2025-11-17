@@ -63,7 +63,7 @@ st.markdown(
 <div class="header-sub">
     for Lista
     <span class="header-updated">
-        (oppdatert {now_oslo.strftime("%H:%M %d.")}{month_no})
+        (oppdatert {now_oslo.strftime("%H:%M %d.")} {month_no})
     </span>
 </div>
 
