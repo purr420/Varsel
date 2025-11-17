@@ -265,7 +265,7 @@ html = f"""
 /* Units row like (m), (s), (%) */
 .header-sub th {{
     font-weight: normal;
-    opacity: 0.75;
+    opacity: 1;
 }}
 
 
