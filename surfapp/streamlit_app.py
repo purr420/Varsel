@@ -194,19 +194,23 @@ for idx, d in enumerate(days):
     if not hours:
         continue
 
-    # Label logic:
+       # Label logic:
     # - Never label the block that is "today" when it's the first block
-    # - If the calendar day is tomorrow (today + 1) => "I morgen"
+    # - If the calendar day is tomorrow => "I morgen 18. nov"
     # - Otherwise => Weekday + date
-    if d == today_date + timedelta(days=1):
-    month_name = MONTHS_NO[d.month - 1]
-    label = f"I morgen {d.day}. {month_name}"
-else:
-    WEEKDAY_NO = ["Mandag", "Tirsdag", "Onsdag",
-                  "Torsdag", "Fredag", "Lørdag", "Søndag"]
-    weekday = WEEKDAY_NO[d.weekday()]
-    month_name = MONTHS_NO[d.month - 1]
-    label = f"{weekday} {d.day}. {month_name}"
+    if d == today_date and idx == 0 and not skip_today:
+        label = None
+    else:
+        if d == today_date + timedelta(days=1):
+            month_name = MONTHS_NO[d.month - 1]
+            label = f"I morgen {d.day}. {month_name}"
+        else:
+            WEEKDAY_NO = ["Mandag", "Tirsdag", "Onsdag",
+                          "Torsdag", "Fredag", "Lørdag", "Søndag"]
+            weekday = WEEKDAY_NO[d.weekday()]
+            month_name = MONTHS_NO[d.month - 1]
+            label = f"{weekday} {d.day}. {month_name}"
+
 
     day_blocks.append({"label": label, "hours": hours})
 
