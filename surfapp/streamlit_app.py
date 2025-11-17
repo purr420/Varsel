@@ -111,9 +111,15 @@ dark_threshold = last_light_floor + timedelta(hours=1)
 
 # Tomorrow:
 tomorrow = now_oslo.date() + timedelta(days=1)
-date_key_tomorrow = tomorrow.strftime("%-d.%m") if not st.runtime.is_running_with_streamlit_cloud else tomorrow.strftime("%d.%m")
+
+# Format date key for daylight CSV
+try:
+    date_key_tomorrow = tomorrow.strftime("%-d.%m")   # Linux/macOS
+except:
+    date_key_tomorrow = tomorrow.strftime("%d.%m")    # Windows fallback
 
 row_tom = DAYLIGHT.loc[DAYLIGHT["Dato"] == date_key_tomorrow]
+
 
 if row_tom.empty:
     # fallback (should never happen)
