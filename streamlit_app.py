@@ -2,6 +2,9 @@ import streamlit as st
 from datetime import datetime, timedelta
 import pytz
 
+# FULL BREDDE – DEN ENE LINJEN SOM LØSER ALT
+st.set_page_config(layout="wide")
+
 st.title("Weather Table – Day Separator + Clean Style")
 
 # Get current Oslo time
@@ -54,12 +57,7 @@ def col_align(i):
 # ---------------------------------------------
 html = f"""
 <style>
-/* Full-width Streamlit override */
-.main .block-container {{
-    max-width: 100% !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-}}
+
 .sticky-table-container {{
     max-height: 650px;
     overflow: auto;
@@ -100,7 +98,7 @@ html = f"""
     top: 0;
 }}
 .sticky-table thead tr:nth-child(2) th {{
-    top: 36px;  /* fixed row height to prevent gap */
+    top: 36px;
 }}
 
 /* Sticky first column */
@@ -119,10 +117,10 @@ html = f"""
 
 /* Day separator row */
 .day-separator td:first-child {{
-    background: #ececec !important;  /* same as first column */
+    background: #ececec !important;
 }}
 .day-separator td[colspan] {{
-    background: #f7f7f7 !important;  /* same as table cells */
+    background: #f7f7f7 !important;
     text-align: left;
     padding-left: 12px;
     font-weight: bold;
@@ -132,9 +130,10 @@ html = f"""
 @media (min-width: 768px) {{
     .sticky-table thead th[rowspan] {{
         top: 0 !important;
-        z-index: 12 !important;  /* above second row, but below corner cell */
+        z-index: 12 !important;
     }}
 }}
+
 </style>
 
 <div class="sticky-table-container">
