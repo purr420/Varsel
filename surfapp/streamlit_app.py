@@ -1,49 +1,41 @@
 import streamlit as st
 from datetime import datetime, timedelta
-from modules.daylight import get_light_times, load_daylight_table
+import pytz
+
+from modules.daylight import load_daylight_table, get_light_times
+from modules.utils import load_weather_table_html  # if exists, else remove
+
+OSLO_TZ = pytz.timezone("Europe/Oslo")
+UTC = pytz.utc
 
 st.set_page_config(layout="wide")
+st.title("Weather Table – Day Separator + Clean Style (UTC backend)")
 
-# ---- Last inn tabell for første/siste surf ----
-DAYLIGHT_TABLE = load_daylight_table()
+# ---- Load daylight data ----
+DAYLIGHT = load_daylight_table()
 
-# ---- Nåtid i OSLO ----
-now = datetime.now()
+# ---- Current time in UTC ----
+now_utc = datetime.now(UTC)
+now_oslo = now_utc.astimezone(OSLO_TZ)
 
-# ---- Dummy skydekke inntil API kommer ----
-cloud_cover = None  # None = antas 50 %
+# ---- Light times ----
+light = get_light_times(now_utc, DAYLIGHT)
 
-# ---- Hent lysets tider ----
-light = get_light_times(now, cloud_cover, DAYLIGHT_TABLE)
-
-first_light = light["first_light"]
-last_light = light["last_light"]
-sunrise = light["sunrise"]
-sunset = light["sunset"]
-
-# ---- Norsk datoformat ----
-MONTHS_NO = [
-    "jan","feb","mar","apr","mai","jun",
-    "jul","aug","sep","okt","nov","des"
-]
-month_txt = MONTHS_NO[now.month - 1]
-
-# ---- UI HEADER ----
+# ---- Display header ----
 st.markdown(f"""
 # Varselet  
 ### for Lista
 
-<small>Oppdatert {now.strftime("%H:%M")} {now.day}. {month_txt}</small>
+<small>Oppdatert {now_oslo.strftime("%H:%M %d.%m")}</small>
 
 ---
 
-**Første lys:** {first_light} &nbsp;&nbsp; 
-**Siste lys:** {last_light} &nbsp;&nbsp;
-**Sol opp:** {sunrise} &nbsp;&nbsp;
-**Sol ned:** {sunset}
+**Første lys:** {light["first_light"]}  
+**Siste lys:** {light["last_light"]}  
+**Sol opp:** {light["sunrise"]}  
+**Sol ned:** {light["sunset"]}  
 
 """, unsafe_allow_html=True)
-
 
 # ---------------------------------------------------
 # 6. TABELLKODEN (LIMT INN UENDRET FRA TIDLIGERE)
