@@ -22,20 +22,48 @@ now_oslo = now_utc.astimezone(OSLO_TZ)
 light = get_light_times(now_utc, DAYLIGHT)
 
 # ---- Display header ----
-st.markdown(f"""
-# Varselet  
-### for Lista
+st.markdown(
+    f"""
+<style>
+.header-title {{
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1.0;
+    margin-bottom: 0px;
+}}
+.header-sub {{
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1.0;
+    margin-top: -4px;
+    margin-bottom: 2px;
+}}
+.header-updated {{
+    font-size: 15px;
+    opacity: 0.75;
+    margin-top: -6px;
+    margin-bottom: 10px;
+}}
+.header-line {{
+    font-size: 18px;
+    margin-top: 4px;
+}}
+</style>
 
-<small>Oppdatert {now_oslo.strftime("%H:%M %d.%m")}</small>
+<div class="header-title">Varselet</div>
+<div class="header-sub">for Lista 
+    <span class="header-updated">(oppdatert {now_oslo.strftime("%H:%M %d. %b")})</span>
+</div>
 
----
+<div class="header-line">
+<b>Første / siste lys:</b> {light["first_light"]} / {light["last_light"]} &nbsp;&nbsp;
+<b>Sol opp / ned:</b> {light["sunrise"]} / {light["sunset"]}
+</div>
 
-**Første lys:** {light["first_light"]}  
-**Siste lys:** {light["last_light"]}  
-**Sol opp:** {light["sunrise"]}  
-**Sol ned:** {light["sunset"]}  
-
-""", unsafe_allow_html=True)
+<hr>
+""",
+    unsafe_allow_html=True
+)
 
 # ---- Weather table (your existing HTML table renderer) ----
 
