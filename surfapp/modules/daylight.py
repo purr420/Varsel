@@ -408,35 +408,52 @@ def _parse_interval(interval_string):
     return start_str.strip(), end_str.strip()
 
 
-def get_light_times(now: datetime.datetime, cloud_cover: int | None, table: dict):
+import datetime
+
+def _parse_interval(interval_string):
+    """Convert '08:27-08:52' → ('08:27','08:52')."""
+    start_str, end_str = interval_string.split("-")
+    return start_str.strip(), end_str.strip()
+
+
+def get_light_times(now: datetime.datetime, cloud_cover, table: dict):
     """
-    Return first_light and last_light based on cloud cover.
-    If cloud missing → assume 50%.
+    now: datetime
+    cloud_cover: prosent (0–100) eller None
+    table: dict fra load_daylight_table()
+    Returnerer:
+      - first_light (første surf-lys, justert for skydekke)
+      - last_light  (siste surf-lys, justert for skydekke)
+      - sunrise     (ren 'opp' fra tabellen)
+      - sunset      (ren 'ned' fra tabellen)
     """
 
-    key = now.strftime("%d.%m")  # dd.mm
+    key = now.strftime("%d.%m")  # f.eks. "17.11"
 
     if key not in table:
-        return {"first_light": "--:--", "last_light": "--:--"}
+        return {
+            "first_light": "--:--",
+            "last_light": "--:--",
+            "sunrise": "--:--",
+            "sunset": "--:--",
+        }
 
-    # fetch row
     row = table[key]
 
     first_start, first_end = _parse_interval(row["first_surf"])
     last_start, last_end = _parse_interval(row["last_surf"])
 
-    # missing cloud cover → assume 50%
-    cc = 50 if cloud_cover is None else cloud_cover
+    # skydekke mangler → anta 50 %
+    cc = 50 if cloud_cover is None else max(0, min(100, int(cloud_cover)))
 
-    # CLOUD COVER LOGIC
-    if cc == 0:
-        first = first_start
-        last = last_end
-    elif cc == 100:
-        first = first_end
-        last = last_start
+    if cc in (0, 100):
+        if cc == 0:
+            first = first_start
+            last = last_end
+        else:  # 100 %
+            first = first_end
+            last = last_start
     else:
-        # linear interpolation (optional)
         def interpolate_time(t1, t2, weight):
             h1, m1 = map(int, t1.split(":"))
             h2, m2 = map(int, t2.split(":"))
@@ -445,9 +462,13 @@ def get_light_times(now: datetime.datetime, cloud_cover: int | None, table: dict
             mixed = int(total1 * (1 - weight) + total2 * weight)
             return f"{mixed // 60:02d}:{mixed % 60:02d}"
 
-        weight = cc / 100.0
+        w = cc / 100.0
+        first = interpolate_time(first_start, first_end, w)
+        last = interpolate_time(last_start, last_end, w)
 
-        first = interpolate_time(first_start, first_end, weight)
-        last = interpolate_time(last_start, last_end, weight)
-
-    return {"first_light": first, "last_light": last}
+    return {
+        "first_light": first,
+        "last_light": last,
+        "sunrise": row["opp"],
+        "sunset": row["ned"],
+    }
