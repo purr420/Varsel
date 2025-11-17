@@ -54,6 +54,12 @@ def col_align(i):
 # ---------------------------------------------
 html = f"""
 <style>
+/* Full-width Streamlit override */
+.main .block-container {{
+    max-width: 100% !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}}
 .sticky-table-container {{
     max-height: 650px;
     overflow: auto;
