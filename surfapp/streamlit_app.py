@@ -254,6 +254,7 @@ html = f"""
     border: none;
 }}
 
+/* Header rows */
 .header-top {{
     background: #ececec !important;
 }}
@@ -261,6 +262,7 @@ html = f"""
     background: #ececec !important;
 }}
 
+/* Sticky header rows */
 .sticky-table thead th {{
     position: sticky;
     background: #ececec;
@@ -273,6 +275,7 @@ html = f"""
     top: 36px;
 }}
 
+/* Sticky first column */
 .sticky-table td:first-child,
 .sticky-table th:first-child {{
     position: sticky;
@@ -282,11 +285,27 @@ html = f"""
     font-weight: bold;
 }}
 
+.sticky-table thead tr:first-child th:first-child {{
+    z-index: 30 !important;
+}}
+
+/* Day separator row */
+.day-separator td:first-child {{
+    background: #ececec !important;
+}}
 .day-separator td[colspan] {{
     background: #f7f7f7 !important;
     text-align: left;
     padding-left: 12px;
     font-weight: bold;
+}}
+
+/* Fix rowspan header alignment on desktop */
+@media (min-width: 768px) {{
+    .sticky-table thead th[rowspan] {{
+        top: 0 !important;
+        z-index: 12 !important;
+    }}
 }}
 
 </style>
