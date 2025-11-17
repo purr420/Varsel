@@ -282,7 +282,8 @@ html = f"""
     left: 0;
     background: #ececec;
     z-index: 20;
-    font-weight: bold;
+    font-weight: normal;
+    text-align: center;
 }}
 
 .sticky-table thead tr:first-child th:first-child {{
@@ -297,7 +298,8 @@ html = f"""
     background: #f7f7f7 !important;
     text-align: left;
     padding-left: 12px;
-    font-weight: bold;
+    font-weight: normal;
+    font-size: 15px;
 }}
 
 /* Fix rowspan header alignment on desktop */
