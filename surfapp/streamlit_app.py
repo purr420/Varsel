@@ -45,11 +45,12 @@ st.markdown(f"""
 # ---------------------------------------------------
 
 # Bygg radliste
-start = now - timedelta(hours=2)
+start = now_oslo - timedelta(hours=2)
 rows = []
 for i in range(36):
     rows.append({"hour": start.strftime("%H"), "datetime": start})
     start += timedelta(hours=1)
+
 
 # Alignment
 ALIGN = {
