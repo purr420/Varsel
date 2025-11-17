@@ -53,7 +53,8 @@ st.markdown(
 }}
 
 .header-line {{
-    font-size: 18px;
+    font-size: 15px;
+    opacity: 0.75;
     margin-top: 10px;
 }}
 </style>
