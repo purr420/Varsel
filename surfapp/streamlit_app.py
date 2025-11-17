@@ -3,60 +3,64 @@ from datetime import datetime, timedelta
 import pytz
 
 from modules.daylight import load_daylight_table, get_light_times
-from modules.utils import load_weather_table_html  # if exists, else remove
 
 OSLO_TZ = pytz.timezone("Europe/Oslo")
 UTC = pytz.utc
 
 st.set_page_config(layout="wide")
-st.title("Weather Table – Day Separator + Clean Style (UTC backend)")
 
 # ---- Load daylight data ----
 DAYLIGHT = load_daylight_table()
 
-# ---- Current time in UTC ----
+# ---- Current time ----
 now_utc = datetime.now(UTC)
 now_oslo = now_utc.astimezone(OSLO_TZ)
 
 # ---- Light times ----
 light = get_light_times(now_utc, DAYLIGHT)
 
-# ---- Display header ----
+
+# ---------------------------------------------------
+#  HEADER
+# ---------------------------------------------------
 st.markdown(
     f"""
 <style>
 .header-title {{
-    font-size: 36px;
-    font-weight: 700;
+    font-size: 42px;
+    font-weight: 800;
     line-height: 1.0;
-    margin-bottom: 0px;
+    margin-bottom: 8px;
 }}
+
 .header-sub {{
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 500;
     line-height: 1.0;
-    margin-top: -4px;
-    margin-bottom: 2px;
+    margin-top: -2px;
+    margin-bottom: 4px;
 }}
+
 .header-updated {{
     font-size: 15px;
     opacity: 0.75;
-    margin-top: -6px;
-    margin-bottom: 10px;
+    margin-left: 6px;
 }}
+
 .header-line {{
     font-size: 18px;
-    margin-top: 4px;
+    margin-top: 10px;
 }}
 </style>
 
 <div class="header-title">Varselet</div>
-<div class="header-sub">for Lista 
+<div class="header-sub">
+    for Lista
     <span class="header-updated">(oppdatert {now_oslo.strftime("%H:%M %d. %b")})</span>
 </div>
 
 <div class="header-line">
-<b>Første / siste lys:</b> {light["first_light"]} / {light["last_light"]} &nbsp;&nbsp;
+<b>Lyst fra / til:</b> {light["first_light"]} / {light["last_light"]} &nbsp;&nbsp;
 <b>Sol opp / ned:</b> {light["sunrise"]} / {light["sunset"]}
 </div>
 
@@ -65,22 +69,22 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ---- Weather table (your existing HTML table renderer) ----
-
 
 # ---------------------------------------------------
-# 6. TABELLKODEN (LIMT INN UENDRET FRA TIDLIGERE)
+#  TIME ROWS FOR TABLE
 # ---------------------------------------------------
-
-# Bygg radliste
 start = now_oslo - timedelta(hours=2)
 rows = []
+
 for i in range(36):
     rows.append({"hour": start.strftime("%H"), "datetime": start})
     start += timedelta(hours=1)
 
 
-# Alignment
+# ---------------------------------------------------
+#  TABLE RENDERING
+# ---------------------------------------------------
+
 ALIGN = {
     1: "right", 2: "center", 3: "left",
     4: "right", 5: "center", 6: "left",
@@ -88,17 +92,13 @@ ALIGN = {
     10: "right", 11: "left", 12: "center",
     13: "center", 14: "center", 15: "center",
 }
-def col_align(i): return ALIGN.get(i, "center")
 
-# HTML kode (samme som før)
+def col_align(i):
+    return ALIGN.get(i, "center")
+
+
 html = f"""
 <style>
-/* Full width */
-.reportview-container .main .block-container {{
-    max-width: 100% !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-}}
 
 .sticky-table-container {{
     max-height: 650px;
@@ -150,13 +150,6 @@ html = f"""
     font-weight: bold;
 }}
 
-.sticky-table thead tr:first-child th:first-child {{
-    z-index: 30 !important;
-}}
-
-.day-separator td:first-child {{
-    background: #ececec !important;
-}}
 .day-separator td[colspan] {{
     background: #f7f7f7 !important;
     text-align: left;
@@ -164,12 +157,6 @@ html = f"""
     font-weight: bold;
 }}
 
-@media (min-width: 768px) {{
-    .sticky-table thead th[rowspan] {{
-        top: 0 !important;
-        z-index: 12 !important;
-    }}
-}}
 </style>
 
 <div class="sticky-table-container">
@@ -191,13 +178,13 @@ html = f"""
 <tr class="header-sub">
     <th style="text-align:{col_align(1)}">(m)</th>
     <th style="text-align:{col_align(2)}">(s)</th>
-    <th style="text-align:{col_align(3)}"> </th>
+    <th style="text-align:{col_align(3)}"></th>
     <th style="text-align:{col_align(4)}">(m)</th>
     <th style="text-align:{col_align(5)}">(s)</th>
-    <th style="text-align:{col_align(6)}"> </th>
+    <th style="text-align:{col_align(6)}"></th>
     <th style="text-align:{col_align(7)}">(s)</th>
     <th style="text-align:{col_align(8)}">(m/s)</th>
-    <th style="text-align:{col_align(9)}"> </th>
+    <th style="text-align:{col_align(9)}"></th>
     <th style="text-align:{col_align(10)}">(m/s)</th>
     <th style="text-align:{col_align(11)}"></th>
     <th style="text-align:{col_align(12)}">Luft</th>
@@ -210,7 +197,6 @@ html = f"""
 <tbody>
 """
 
-# Insert rows
 last_date = None
 MONTH_NO = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","des"]
 WEEKDAY_NO = ["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"]
@@ -220,13 +206,12 @@ for r in rows:
     this_date = dt.date()
 
     if last_date and this_date != last_date:
-        day = dt.day
-        month = MONTH_NO[dt.month - 1]
         weekday = WEEKDAY_NO[dt.weekday()]
+        month = MONTH_NO[dt.month - 1]
         html += f"""
         <tr class="day-separator">
             <td></td>
-            <td colspan="15">{weekday} {day}. {month}</td>
+            <td colspan="15">{weekday} {dt.day}. {month}</td>
         </tr>
         """
     last_date = this_date
@@ -239,5 +224,4 @@ for r in rows:
 
 html += "</tbody></table></div>"
 
-# Render HTML
 st.components.v1.html(html, height=700)
