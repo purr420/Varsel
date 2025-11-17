@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timedelta
 from modules.daylight import get_light_times, load_daylight_table
 
 st.set_page_config(layout="wide")
