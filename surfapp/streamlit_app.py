@@ -133,7 +133,7 @@ def get_light_oslo_for_date(d: date):
     w_last = max(0.0, min(1.0, cloud_last / 100.0))
 
     usable_first = first_light_early + (first_light_late - first_light_early) * w_first
-    usable_last = last_light_late - (last_light_late - last_light_early) * w_last
+    usable_last = last_light_early + (last_light_late - last_light_early) * (1 - w_last)
 
     return usable_first, usable_last
 
