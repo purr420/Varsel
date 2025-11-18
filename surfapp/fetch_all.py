@@ -1,6 +1,8 @@
 import os
 import csv
 from datetime import datetime, timezone, timedelta
+from typing import Optional
+from email.utils import parsedate_to_datetime
 
 import requests
 import pytz
@@ -12,13 +14,20 @@ import pytz
 UTC = timezone.utc
 OSLO_TZ = pytz.timezone("Europe/Oslo")
 
-BASE_DIR = os.path.dirname(__file__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(BASE_DIR, "data_cache")   # intern cache (beste format)
 PUBLIC_DIR = os.path.join(BASE_DIR, "data_public") # lesbare CSV-er
+LAST_RUN_FILE = os.path.join(CACHE_DIR, "fetch_all_last_run.txt")
 
 
 def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
+
+
+def write_last_run_timestamp(dt: datetime) -> None:
+    ensure_dir(CACHE_DIR)
+    with open(LAST_RUN_FILE, "w", encoding="utf-8") as f:
+        f.write(dt.astimezone(UTC).isoformat())
 
 
 def parse_iso_utc(ts: str) -> datetime:
@@ -44,6 +53,20 @@ def to_oslo_hhmm(dt_utc: datetime) -> str:
         dt_utc = dt_utc.replace(tzinfo=UTC)
     dt_oslo = dt_utc.astimezone(OSLO_TZ)
     return dt_oslo.strftime("%H:%M")
+
+
+def parse_http_date(date_str: Optional[str]) -> Optional[datetime]:
+    if not date_str:
+        return None
+    try:
+        dt = parsedate_to_datetime(date_str)
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    else:
+        dt = dt.astimezone(UTC)
+    return dt
 
 
 def deg_to_compass(deg) -> str:
@@ -94,6 +117,7 @@ def write_cache_and_readable_csv(
     source_name: str,
     rows: list[dict],
     value_keys: list[str],
+    metadata_lines: Optional[list[str]] = None,
 ) -> None:
     """
     Lagrer:
@@ -116,7 +140,11 @@ def write_cache_and_readable_csv(
     cache_path = os.path.join(CACHE_DIR, f"{source_name}_cache.csv")
     cache_fieldnames = ["time_utc"] + value_keys
 
+    metadata_lines = metadata_lines or []
+
     with open(cache_path, "w", newline="", encoding="utf-8") as f:
+        for line in metadata_lines:
+            f.write(f"# {line}\n")
         writer = csv.DictWriter(f, fieldnames=cache_fieldnames)
         writer.writeheader()
 
@@ -137,6 +165,8 @@ def write_cache_and_readable_csv(
     public_fieldnames = ["time_utc", "time_local"] + value_keys
 
     with open(public_path, "w", newline="", encoding="utf-8") as f:
+        for line in metadata_lines:
+            f.write(f"# {line}\n")
         writer = csv.DictWriter(f, fieldnames=public_fieldnames)
         writer.writeheader()
 
@@ -171,7 +201,7 @@ def write_cache_and_readable_csv(
 #  YR – vind, skydekke, nedbør
 # ---------------------------------------------------
 
-def fetch_yr_lista() -> list[dict]:
+def fetch_yr_lista() -> tuple[list[dict], dict]:
     """
     Henter yr-data for Lista (locationforecast 2.0).
     Normaliserer til:
@@ -193,6 +223,14 @@ def fetch_yr_lista() -> list[dict]:
     resp = requests.get(url, headers=headers, timeout=15)
     resp.raise_for_status()
     data = resp.json()
+    meta_time = (
+        data.get("properties", {})
+        .get("meta", {})
+        .get("updated_at")
+    )
+    meta = {}
+    if meta_time:
+        meta["model_run"] = parse_iso_utc(meta_time)
 
     timeseries = data["properties"]["timeseries"]
 
@@ -217,14 +255,14 @@ def fetch_yr_lista() -> list[dict]:
         }
         rows.append(row)
 
-    return rows
+    return rows, meta
 
 
 # ---------------------------------------------------
 #  DMI HAV – bølger + vind
 # ---------------------------------------------------
 
-def fetch_dmi_hav_lista() -> list[dict]:
+def fetch_dmi_hav_lista() -> tuple[list[dict], dict]:
     """
     Henter bølge/vind-data fra DMI (hav).
     """
@@ -263,6 +301,7 @@ def fetch_dmi_hav_lista() -> list[dict]:
     resp = requests.get(url, params=params, timeout=30)
     resp.raise_for_status()
     data = resp.json()
+    model_run = parse_http_date(resp.headers.get("date"))
 
     value_map = {
         "wind_speed_ms": "wind-speed",
@@ -292,14 +331,14 @@ def fetch_dmi_hav_lista() -> list[dict]:
             row[out_key] = props.get(prop_key)
         rows.append(row)
 
-    return rows
+    return rows, {"model_run": model_run}
 
 
 # ---------------------------------------------------
 #  DMI LAND – vind på land
 # ---------------------------------------------------
 
-def fetch_dmi_land_lista() -> list[dict]:
+def fetch_dmi_land_lista() -> tuple[list[dict], dict]:
     """
     Henter vind-data fra DMI (land).
     """
@@ -317,6 +356,7 @@ def fetch_dmi_land_lista() -> list[dict]:
     resp = requests.get(url, params=params, timeout=30)
     resp.raise_for_status()
     data = resp.json()
+    model_run = parse_http_date(resp.headers.get("date"))
 
     rows: list[dict] = []
     for feature in data.get("features", []):
@@ -338,14 +378,14 @@ def fetch_dmi_land_lista() -> list[dict]:
             }
         )
 
-    return rows
+    return rows, {"model_run": model_run}
 
 
 # ---------------------------------------------------
 #  MET (hav / sjøtemperatur eller bølger)
 # ---------------------------------------------------
 
-def fetch_met_lista() -> list[dict]:
+def fetch_met_lista() -> tuple[list[dict], dict]:
     """
     Henter MET-data fra met_lista.py (sannsynligvis bølger eller sjøtemp).
     Fra filen din ser det ut som du henter en enkel verdi (f.eks. sjøtemperatur).
@@ -359,6 +399,14 @@ def fetch_met_lista() -> list[dict]:
     resp = requests.get(url, headers=headers, timeout=30)
     resp.raise_for_status()
     data = resp.json()
+    meta_time = (
+        data.get("properties", {})
+        .get("meta", {})
+        .get("updated_at")
+    )
+    meta = {}
+    if meta_time:
+        meta["model_run"] = parse_iso_utc(meta_time)
 
     rows: list[dict] = []
     timeseries = data.get("properties", {}).get("timeseries", [])
@@ -374,7 +422,7 @@ def fetch_met_lista() -> list[dict]:
             }
         )
 
-    return rows
+    return rows, meta
 
 
 # ---------------------------------------------------
@@ -466,17 +514,30 @@ def fetch_lindesnes_fyr() -> list[dict]:
 
 def main():
     # 1) YR
-    yr_rows = fetch_yr_lista()
+    yr_rows, yr_meta = fetch_yr_lista()
+    meta_lines = []
+    if yr_meta.get("model_run"):
+        meta_lines.append(
+            "Model run (UTC): "
+            + yr_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+        )
     write_cache_and_readable_csv(
         "yr_lista",
         yr_rows,
         ["wind_speed_ms", "wind_dir_deg", "gust_speed_ms", "cloud_cover_pct", "precip_mm"],
+        metadata_lines=meta_lines,
     )
 
     # 2) DMI HAV
-    dmi_hav_rows = fetch_dmi_hav_lista()
+    dmi_hav_rows, dmi_hav_meta = fetch_dmi_hav_lista()
     if dmi_hav_rows:
         # Tilpass value_keys til det du faktisk returnerer
+        meta_lines = []
+        if dmi_hav_meta.get("model_run"):
+            meta_lines.append(
+                "Model run (UTC): "
+                + dmi_hav_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+            )
         write_cache_and_readable_csv(
             "dmi_hav_lista",
             dmi_hav_rows,
@@ -496,24 +557,39 @@ def main():
                 "swell_dir_deg",
                 "benjamin_feir_index",
             ],
+            metadata_lines=meta_lines,
         )
 
     # 3) DMI LAND
-    dmi_land_rows = fetch_dmi_land_lista()
+    dmi_land_rows, dmi_land_meta = fetch_dmi_land_lista()
     if dmi_land_rows:
+        meta_lines = []
+        if dmi_land_meta.get("model_run"):
+            meta_lines.append(
+                "Model run (UTC): "
+                + dmi_land_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+            )
         write_cache_and_readable_csv(
             "dmi_land_lista",
             dmi_land_rows,
             ["wind_speed_ms", "wind_dir_deg", "gust_speed_ms", "temp_air_c"],
+            metadata_lines=meta_lines,
         )
 
     # 4) MET
-    met_rows = fetch_met_lista()
+    met_rows, met_meta = fetch_met_lista()
     if met_rows:
+        meta_lines = []
+        if met_meta.get("model_run"):
+            meta_lines.append(
+                "Model run (UTC): "
+                + met_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+            )
         write_cache_and_readable_csv(
             "met_lista",
             met_rows,
             ["sea_temp_c"],
+            metadata_lines=meta_lines,
         )
 
     # 5) Lindesnes fyr
@@ -528,3 +604,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    write_last_run_timestamp(datetime.now(UTC))

@@ -22,7 +22,7 @@ def load_daylight_table():
 
 
 def parse_utc(date_str, clock_str):
-    """Convert UTC HH:MM on given date to datetime."""
+    """Convert UTC HH:MM on given date to UTC datetime."""
     day, month = map(int, date_str.split("."))
     h, m = map(int, clock_str.split(":"))
     dt = datetime(2025, month, day, h, m, tzinfo=UTC)
