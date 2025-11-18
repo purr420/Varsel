@@ -1,6 +1,8 @@
 import streamlit as st
 from datetime import datetime, timedelta, date
 import pytz
+import csv
+import os
 
 from modules.daylight import load_daylight_table, get_light_times
 
@@ -11,6 +13,74 @@ st.set_page_config(layout="wide")
 
 # ---- Load daylight data ----
 DAYLIGHT = load_daylight_table()
+BASE_DIR = os.path.dirname(__file__)
+YR_CACHE_PATH = os.path.join(BASE_DIR, "data_cache", "yr_lista_cache.csv")
+
+
+def load_yr_cloud_rows():
+    """
+    Read cloud-cover rows from the cached YR file (UTC -> Oslo).
+    """
+    if not os.path.exists(YR_CACHE_PATH):
+        return []
+
+    rows = []
+    with open(YR_CACHE_PATH, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            ts = row.get("time_utc")
+            if not ts:
+                continue
+            try:
+                dt = datetime.fromisoformat(ts)
+            except ValueError:
+                continue
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+
+            cloud_str = row.get("cloud_cover_pct")
+            cloud_val = None
+            if cloud_str not in (None, ""):
+                try:
+                    cloud_val = float(cloud_str)
+                except ValueError:
+                    cloud_val = None
+
+            rows.append(
+                {
+                    "time_oslo": dt.astimezone(OSLO_TZ),
+                    "cloud_cover_pct": cloud_val,
+                }
+            )
+    return rows
+
+
+YR_CLOUD_ROWS = load_yr_cloud_rows()
+
+
+def cloud_pct_for_time(target_oslo: datetime) -> float:
+    """
+    Return cloud cover percentage for the cached forecast nearest to target_oslo.
+    Fallback to 50 if no usable data.
+    """
+    if not YR_CLOUD_ROWS:
+        return 50.0
+
+    best_row = None
+    best_diff = None
+    for row in YR_CLOUD_ROWS:
+        diff = abs((row["time_oslo"] - target_oslo).total_seconds())
+        if best_diff is None or diff < best_diff:
+            best_diff = diff
+            best_row = row
+
+    if not best_row:
+        return 50.0
+
+    cloud = best_row.get("cloud_cover_pct")
+    if cloud is None:
+        return 50.0
+    return max(0.0, min(100.0, cloud))
 
 # ---- Current time ----
 now_utc = datetime.now(UTC)
@@ -25,8 +95,8 @@ light = get_light_times(now_utc, DAYLIGHT)
 
 def get_light_oslo_for_date(d: date):
     """
-    Return (first_light_oslo, last_light_oslo) as aware datetimes in Oslo time
-    for the given calendar date d, using the UTC daylight table.
+    Return interpolated (first_light_oslo, last_light_oslo) using daylight table
+    bounds blended with cloud cover near each window midpoint.
     """
     # Table key is d(d).mm, e.g. "1.01", "18.11"
     date_key = f"{d.day}.{d.month:02d}".lstrip("0")
@@ -44,9 +114,28 @@ def get_light_oslo_for_date(d: date):
         dt_utc = datetime(d.year, d.month, d.day, h, m, tzinfo=UTC)
         return dt_utc.astimezone(OSLO_TZ)
 
-    first = parse_utc_to_oslo(row["First_surf_start_UTC"])
-    last = parse_utc_to_oslo(row["Last_surf_end_UTC"])
-    return first, last
+    first_light_early = parse_utc_to_oslo(row["First_surf_start_UTC"])
+    first_light_late = parse_utc_to_oslo(row["First_surf_end_UTC"])
+    last_light_early = parse_utc_to_oslo(row["Last_surf_start_UTC"])
+    last_light_late = parse_utc_to_oslo(row["Last_surf_end_UTC"])
+
+    if not all([first_light_early, first_light_late, last_light_early, last_light_late]):
+        return None, None
+
+    # Midpoints for cloud sampling
+    midpoint_first = first_light_early + (first_light_late - first_light_early) / 2
+    midpoint_last = last_light_early + (last_light_late - last_light_early) / 2
+
+    cloud_first = cloud_pct_for_time(midpoint_first)
+    cloud_last = cloud_pct_for_time(midpoint_last)
+
+    w_first = max(0.0, min(1.0, cloud_first / 100.0))
+    w_last = max(0.0, min(1.0, cloud_last / 100.0))
+
+    usable_first = first_light_early + (first_light_late - first_light_early) * w_first
+    usable_last = last_light_late - (last_light_late - last_light_early) * w_last
+
+    return usable_first, usable_last
 
 
 def compute_day_window(d: date):
