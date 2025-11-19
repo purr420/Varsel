@@ -18,6 +18,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(BASE_DIR, "data_cache")   # intern cache (beste format)
 PUBLIC_DIR = os.path.join(BASE_DIR, "data_public") # lesbare CSV-er
 LAST_RUN_FILE = os.path.join(CACHE_DIR, "fetch_all_last_run.txt")
+DMI_API_KEY_EDR = "ae501bfc-112e-400e-89df-77a2a6b9af72"
+DMI_API_KEY_STAC = "a4b09032-bca5-4255-ac85-6fea95a1e02c"
 
 
 def ensure_dir(path: str) -> None:
@@ -67,6 +69,40 @@ def parse_http_date(date_str: Optional[str]) -> Optional[datetime]:
     else:
         dt = dt.astimezone(UTC)
     return dt
+
+
+def fetch_dmi_stac_metadata(collection: str, api_key: str) -> Optional[dict]:
+    """
+    Hent metadata (modelRun + created) fra DMI STAC API for gitt kolleksjon.
+    """
+    url = f"https://dmigw.govcloud.dk/v1/forecastdata/collections/{collection}/items"
+    params = {
+        "limit": 1,
+        "api-key": api_key,
+    }
+    try:
+        resp = requests.get(url, params=params, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        features = data.get("features") or []
+        if not features:
+            print(f"[{collection}] STAC: ingen features – hopper over.")
+            return None
+        props = features[0].get("properties", {})
+        meta: dict[str, datetime] = {}
+        model_run = props.get("modelRun")
+        created = props.get("created")
+        if model_run:
+            meta["model_run"] = parse_iso_utc(model_run)
+        if created:
+            meta["created"] = parse_iso_utc(created)
+        if not meta:
+            print(f"[{collection}] STAC: mangler modelRun/created – hopper over.")
+            return None
+        return meta
+    except requests.RequestException as exc:
+        print(f"[{collection}] STAC-feil: {exc} – hopper over.")
+        return None
 
 
 def deg_to_compass(deg) -> str:
@@ -262,15 +298,16 @@ def fetch_yr_lista() -> tuple[list[dict], dict]:
 #  DMI HAV – bølger + vind
 # ---------------------------------------------------
 
-def fetch_dmi_hav_lista() -> tuple[list[dict], dict]:
+def fetch_dmi_hav_lista() -> Optional[tuple[list[dict], dict]]:
     """
     Henter bølge/vind-data fra DMI (hav).
     """
 
-    api_key = "ae501bfc-112e-400e-89df-77a2a6b9af72"
     collection = "wam_nsb"
     lon = 6.5
     lat = 58.1
+
+    stac_meta = fetch_dmi_stac_metadata(collection, DMI_API_KEY_STAC)
 
     parameters = [
         "wind-speed",
@@ -294,14 +331,13 @@ def fetch_dmi_hav_lista() -> tuple[list[dict], dict]:
         "coords": f"POINT({lon} {lat})",
         "crs": "crs84",
         "parameter-name": ",".join(parameters),
-        "api-key": api_key,
+        "api-key": DMI_API_KEY_EDR,
         "f": "GeoJSON",
     }
 
     resp = requests.get(url, params=params, timeout=30)
     resp.raise_for_status()
     data = resp.json()
-    model_run = parse_http_date(resp.headers.get("date"))
 
     value_map = {
         "wind_speed_ms": "wind-speed",
@@ -331,32 +367,39 @@ def fetch_dmi_hav_lista() -> tuple[list[dict], dict]:
             row[out_key] = props.get(prop_key)
         rows.append(row)
 
-    return rows, {"model_run": model_run}
+    stac_meta = stac_meta or {}
+    model_run_header = parse_http_date(resp.headers.get("date"))
+    if model_run_header and not stac_meta.get("model_run"):
+        stac_meta["model_run"] = model_run_header
+
+    return rows, stac_meta
 
 
 # ---------------------------------------------------
 #  DMI LAND – vind på land
 # ---------------------------------------------------
 
-def fetch_dmi_land_lista() -> tuple[list[dict], dict]:
+def fetch_dmi_land_lista() -> Optional[tuple[list[dict], dict]]:
     """
     Henter vind-data fra DMI (land).
     """
 
     lon, lat = 6.56667, 58.10917
-    url = "https://dmigw.govcloud.dk/v1/forecastedr/collections/harmonie_dini_sf/position"
+    collection = "harmonie_dini_sf"
+    stac_meta = fetch_dmi_stac_metadata(collection, DMI_API_KEY_STAC)
+
+    url = f"https://dmigw.govcloud.dk/v1/forecastedr/collections/{collection}/position"
     params = {
         "coords": f"POINT({lon} {lat})",
         "crs": "crs84",
         "parameter-name": "wind-speed-10m,wind-dir-10m,gust-wind-speed-10m,temperature-2m",
-        "api-key": "ae501bfc-112e-400e-89df-77a2a6b9af72",
+        "api-key": DMI_API_KEY_EDR,
         "f": "GeoJSON",
     }
 
     resp = requests.get(url, params=params, timeout=30)
     resp.raise_for_status()
     data = resp.json()
-    model_run = parse_http_date(resp.headers.get("date"))
 
     rows: list[dict] = []
     for feature in data.get("features", []):
@@ -378,7 +421,12 @@ def fetch_dmi_land_lista() -> tuple[list[dict], dict]:
             }
         )
 
-    return rows, {"model_run": model_run}
+    stac_meta = stac_meta or {}
+    model_run_header = parse_http_date(resp.headers.get("date"))
+    if model_run_header and not stac_meta.get("model_run"):
+        stac_meta["model_run"] = model_run_header
+
+    return rows, stac_meta
 
 
 # ---------------------------------------------------
@@ -529,52 +577,65 @@ def main():
     )
 
     # 2) DMI HAV
-    dmi_hav_rows, dmi_hav_meta = fetch_dmi_hav_lista()
-    if dmi_hav_rows:
-        # Tilpass value_keys til det du faktisk returnerer
-        meta_lines = []
-        if dmi_hav_meta.get("model_run"):
-            meta_lines.append(
-                "Model run (UTC): "
-                + dmi_hav_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+    dmi_hav_result = fetch_dmi_hav_lista()
+    if dmi_hav_result:
+        dmi_hav_rows, dmi_hav_meta = dmi_hav_result
+        if dmi_hav_rows:
+            meta_lines = []
+            if dmi_hav_meta.get("model_run"):
+                meta_lines.append(
+                    "Model run (UTC): "
+                    + dmi_hav_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+                )
+            if dmi_hav_meta.get("created"):
+                meta_lines.append(
+                    "Created (UTC): "
+                    + dmi_hav_meta["created"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+                )
+            write_cache_and_readable_csv(
+                "dmi_hav_lista",
+                dmi_hav_rows,
+                [
+                    "wind_speed_ms",
+                    "wind_dir_deg",
+                    "hs_m",
+                    "tp_s",
+                    "mean_wave_period_s",
+                    "mean_zerocrossing_period_s",
+                    "mean_wave_dir_deg",
+                    "windwave_hs_m",
+                    "windwave_tp_s",
+                    "windwave_dir_deg",
+                    "swell_hs_m",
+                    "swell_tp_s",
+                    "swell_dir_deg",
+                    "benjamin_feir_index",
+                ],
+                metadata_lines=meta_lines,
             )
-        write_cache_and_readable_csv(
-            "dmi_hav_lista",
-            dmi_hav_rows,
-            [
-                "wind_speed_ms",
-                "wind_dir_deg",
-                "hs_m",
-                "tp_s",
-                "mean_wave_period_s",
-                "mean_zerocrossing_period_s",
-                "mean_wave_dir_deg",
-                "windwave_hs_m",
-                "windwave_tp_s",
-                "windwave_dir_deg",
-                "swell_hs_m",
-                "swell_tp_s",
-                "swell_dir_deg",
-                "benjamin_feir_index",
-            ],
-            metadata_lines=meta_lines,
-        )
 
     # 3) DMI LAND
-    dmi_land_rows, dmi_land_meta = fetch_dmi_land_lista()
-    if dmi_land_rows:
-        meta_lines = []
-        if dmi_land_meta.get("model_run"):
-            meta_lines.append(
-                "Model run (UTC): "
-                + dmi_land_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+    dmi_land_result = fetch_dmi_land_lista()
+    if dmi_land_result:
+        dmi_land_rows, dmi_land_meta = dmi_land_result
+        if dmi_land_rows:
+            meta_lines = []
+            if dmi_land_meta.get("model_run"):
+                meta_lines.append(
+                    "Model run (UTC): "
+                    + dmi_land_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+                )
+            if dmi_land_meta.get("created"):
+                meta_lines.append(
+                    "Created (UTC): "
+                    + dmi_land_meta["created"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+                )
+            write_cache_and_readable_csv(
+                "dmi_land_lista",
+                dmi_land_rows,
+                ["wind_speed_ms", "wind_dir_deg", "gust_speed_ms", "temp_air_c"],
+                metadata_lines=meta_lines,
             )
-        write_cache_and_readable_csv(
-            "dmi_land_lista",
-            dmi_land_rows,
-            ["wind_speed_ms", "wind_dir_deg", "gust_speed_ms", "temp_air_c"],
-            metadata_lines=meta_lines,
-        )
 
     # 4) MET
     met_rows, met_meta = fetch_met_lista()

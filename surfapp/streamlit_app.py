@@ -5,6 +5,7 @@ import pytz
 import csv
 import os
 import json
+import re
 import subprocess
 import sys
 
@@ -157,18 +158,36 @@ YR_CLOUD_ROWS = load_yr_cloud_rows()
 CLOUD_FREEZE = prune_cloud_freeze(load_cloud_freeze())
 
 
-def read_model_run_from_cache(filename: str) -> Optional[str]:
+def read_metadata_from_cache(filename: str) -> Optional[dict]:
     path = os.path.join(DATA_CACHE_DIR, filename)
     if not os.path.exists(path):
         return None
+
+    metadata: dict[str, datetime | str] = {}
+
+    def parse_value(raw: str):
+        raw = raw.strip()
+        try:
+            dt = datetime.fromisoformat(raw)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            else:
+                dt = dt.astimezone(UTC)
+            return dt
+        except ValueError:
+            return raw
+
     try:
         with open(path, encoding="utf-8") as f:
             for line in f:
                 if line.startswith("# Model run"):
-                    return line.strip("# \n")
+                    metadata["model_run"] = parse_value(line.split(":", 1)[1])
+                elif line.startswith("# Created"):
+                    metadata["created"] = parse_value(line.split(":", 1)[1])
     except OSError:
         return None
-    return None
+
+    return metadata or None
 
 def try_parse_float(value):
     if value in (None, ""):
@@ -270,11 +289,42 @@ def get_val(row, key):
     return row.get(key)
 
 
-MODEL_RUN_INFO = {
-    "dmi_hav": read_model_run_from_cache("dmi_hav_lista_cache.csv"),
-    "dmi_land": read_model_run_from_cache("dmi_land_lista_cache.csv"),
-    "yr": read_model_run_from_cache("yr_lista_cache.csv"),
+MODEL_METADATA = {
+    "dmi_hav": read_metadata_from_cache("dmi_hav_lista_cache.csv") or {},
+    "dmi_land": read_metadata_from_cache("dmi_land_lista_cache.csv") or {},
+    "yr": read_metadata_from_cache("yr_lista_cache.csv") or {},
 }
+
+
+def format_run_display(value) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        month = MONTHS_EN[value.month - 1]
+        return f"{value.day}. {month} {value.strftime('%H:%M')}"
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def format_dmi_metadata(label: str, meta: dict) -> Optional[str]:
+    run_display = format_run_display(meta.get("model_run"))
+    if not run_display:
+        return None
+    line = f"{label}: Run (UTC) {run_display}"
+    created = meta.get("created")
+    if isinstance(created, datetime):
+        line += f" Created {created.strftime('%H:%M')}"
+    elif isinstance(created, str) and created:
+        line += f" Created {created}"
+    return line
+
+
+def format_yr_metadata(meta: dict) -> Optional[str]:
+    run_display = format_run_display(meta.get("model_run"))
+    if not run_display:
+        return None
+    return f"Yr (Locationforecast v2): Run (UTC) {run_display}"
 
 
 YR_DATA = load_cache_by_hour("yr_lista_cache.csv")
@@ -299,6 +349,17 @@ def load_lindesnes_latest():
 
 
 LINDESNES_LATEST = load_lindesnes_latest()
+
+
+def format_obs_label(label: Optional[str]) -> str:
+    if not label:
+        return "--"
+    m = re.match(r"(\d+)\.\s*([A-Za-zæøåÆØÅ]+)", label)
+    if m:
+        day = m.group(1)
+        month = m.group(2).rstrip(".")
+        return f"{day}. {month}"
+    return label
 
 
 def cloud_pct_for_time(target_oslo: datetime) -> float:
@@ -448,6 +509,8 @@ usable_first_tomorrow, usable_last_tomorrow = get_light_oslo_for_date(tomorrow_d
 
 MONTHS_NO = ["jan", "feb", "mar", "apr", "mai", "jun",
              "jul", "aug", "sep", "okt", "nov", "des"]
+MONTHS_EN = ["January", "February", "March", "April", "May", "June",
+             "July", "August", "September", "October", "November", "December"]
 month_no = MONTHS_NO[now_oslo.month - 1]
 if LAST_FETCH_UTC:
     last_fetch_oslo = LAST_FETCH_UTC.astimezone(OSLO_TZ)
@@ -507,7 +570,7 @@ I dag {today_date.day}. {month_no} Lyst fra / til: <b>{header_first_light} / {he
 I morgen {tomorrow_date.day}. {MONTHS_NO[tomorrow_date.month - 1]} Lyst fra / til: <b>{format_oslo(usable_first_tomorrow, "--:--")} / {format_oslo(usable_last_tomorrow, "--:--")}</b>
 </div>
 <div class="header-line">
-Sjøtemp {fmt_decimal(LINDESNES_LATEST[0]) if LINDESNES_LATEST else "--"} °C målt ved Lindesnes {LINDESNES_LATEST[1] if LINDESNES_LATEST and LINDESNES_LATEST[1] else "--"}
+Sjø: {fmt_decimal(LINDESNES_LATEST[0]) if LINDESNES_LATEST else "--"} °C (Lindesnes fyr) målt {format_obs_label(LINDESNES_LATEST[1]) if LINDESNES_LATEST and LINDESNES_LATEST[1] else "--"}
 </div>
 
 <hr>
@@ -708,10 +771,11 @@ html = f"""
 }}
 
 .model-run-wrapper {{
-    margin-top: 16px;
-    color: #333;
-    font-size: 15px;
-    opacity: 0.8;
+    color: white !important;
+    opacity: 0.75 !important;
+    position: relative;
+    z-index: 50;
+    background: transparent;
 }}
 .model-run-wrapper div {{
     margin-bottom: 4px;
@@ -725,11 +789,11 @@ html = f"""
 <thead>
 <tr class="header-top">
     <th rowspan="2">Tid</th>
-    <th colspan="3">Dønning (dmi)</th>
+    <th colspan="3">Dønning (DMI)</th>
     <th>P.dom.</th>
-    <th colspan="3">Vindbølger (dmi)</th>
-    <th colspan="2">Vind (yr)</th>
-    <th colspan="2">Vind (dmi)</th>
+    <th colspan="3">Vindbølger (DMI)</th>
+    <th colspan="2">Vind (Yr)</th>
+    <th colspan="2">Vind (DMI)</th>
     <th colspan="2">Temp (°C)</th>
     <th>Skydekke</th>
     <th>Nedbør</th>
@@ -790,7 +854,7 @@ for block in day_blocks:
             fmt_wind(get_val(dmi_land_row, "wind_speed_ms"), get_val(dmi_land_row, "gust_speed_ms")),
             deg_to_arrow(get_val(dmi_land_row, "wind_dir_deg")),
             fmt_integer(get_val(dmi_land_row, "temp_air_c")),
-        fmt_integer(get_val(met_row, "sea_temp_c")),
+            fmt_integer(get_val(met_row, "sea_temp_c")),
             fmt_integer(get_val(yr_row, "cloud_cover_pct")),
             fmt_decimal(get_val(yr_row, "precip_mm")),
         ]
@@ -804,12 +868,15 @@ for block in day_blocks:
 html += "</tbody></table></div>"
 
 footer_lines = []
-if MODEL_RUN_INFO["dmi_hav"]:
-    footer_lines.append(f"dmi_hav (WAM NSB): {MODEL_RUN_INFO['dmi_hav']}")
-if MODEL_RUN_INFO["dmi_land"]:
-    footer_lines.append(f"dmi_land (HARMONIE Dini SF): {MODEL_RUN_INFO['dmi_land']}")
-if MODEL_RUN_INFO["yr"]:
-    footer_lines.append(f"yr (Locationforecast v2): {MODEL_RUN_INFO['yr']}")
+line = format_dmi_metadata("DMI (WAM NSB)", MODEL_METADATA["dmi_hav"])
+if line:
+    footer_lines.append(line)
+line = format_dmi_metadata("DMI (HARMONIE Dini SF)", MODEL_METADATA["dmi_land"])
+if line:
+    footer_lines.append(line)
+line = format_yr_metadata(MODEL_METADATA["yr"])
+if line:
+    footer_lines.append(line)
 
 if footer_lines:
     html += '<div class="model-run-wrapper">'
