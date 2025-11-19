@@ -507,7 +507,7 @@ I dag {today_date.day}. {month_no} Lyst fra / til: <b>{header_first_light} / {he
 I morgen {tomorrow_date.day}. {MONTHS_NO[tomorrow_date.month - 1]} Lyst fra / til: <b>{format_oslo(usable_first_tomorrow, "--:--")} / {format_oslo(usable_last_tomorrow, "--:--")}</b>
 </div>
 <div class="header-line">
-Sjøtemp {fmt_integer(LINDESNES_LATEST[0]) if LINDESNES_LATEST else "--"} °C målt ved Lindesnes {LINDESNES_LATEST[1] if LINDESNES_LATEST and LINDESNES_LATEST[1] else "--"}
+Sjøtemp {fmt_decimal(LINDESNES_LATEST[0]) if LINDESNES_LATEST else "--"} °C målt ved Lindesnes {LINDESNES_LATEST[1] if LINDESNES_LATEST and LINDESNES_LATEST[1] else "--"}
 </div>
 
 <hr>
@@ -596,10 +596,12 @@ for idx, d in enumerate(days):
 
 ALIGN = {
     1: "right", 2: "center", 3: "left",
-    4: "right", 5: "center", 6: "left",
-    7: "center", 8: "right", 9: "left",
-    10: "right", 11: "left", 12: "center",
-    13: "center", 14: "center", 15: "center",
+    4: "center",
+    5: "right", 6: "center", 7: "left",
+    8: "right", 9: "left",
+    10: "right", 11: "left",
+    12: "center", 13: "center",
+    14: "center", 15: "center",
 }
 
 def col_align(i):
@@ -723,9 +725,9 @@ html = f"""
 <thead>
 <tr class="header-top">
     <th rowspan="2">Tid</th>
-    <th colspan="3">Swell</th>
-    <th colspan="3">Vindbølger</th>
+    <th colspan="3">Dønning (dmi)</th>
     <th>P.dom.</th>
+    <th colspan="3">Vindbølger (dmi)</th>
     <th colspan="2">Vind (yr)</th>
     <th colspan="2">Vind (dmi)</th>
     <th colspan="2">Temp (°C)</th>
@@ -737,10 +739,10 @@ html = f"""
     <th style="text-align:{col_align(1)}">(m)</th>
     <th style="text-align:{col_align(2)}">(s)</th>
     <th style="text-align:{col_align(3)}"></th>
-    <th style="text-align:{col_align(4)}">(m)</th>
-    <th style="text-align:{col_align(5)}">(s)</th>
-    <th style="text-align:{col_align(6)}"></th>
-    <th style="text-align:{col_align(7)}">(s)</th>
+    <th style="text-align:{col_align(4)}">(s)</th>
+    <th style="text-align:{col_align(5)}">(m)</th>
+    <th style="text-align:{col_align(6)}">(s)</th>
+    <th style="text-align:{col_align(7)}"></th>
     <th style="text-align:{col_align(8)}">(m/s)</th>
     <th style="text-align:{col_align(9)}"></th>
     <th style="text-align:{col_align(10)}">(m/s)</th>
@@ -754,7 +756,6 @@ html = f"""
 
 <tbody>
 """
-
 # Insert blocks and rows
 for block in day_blocks:
     label = block["label"]
@@ -780,10 +781,10 @@ for block in day_blocks:
             fmt_decimal(get_val(dmi_hav_row, "swell_hs_m")),
             fmt_decimal(get_val(dmi_hav_row, "swell_tp_s")),
             deg_to_arrow(get_val(dmi_hav_row, "swell_dir_deg")),
+            fmt_decimal(get_val(dmi_hav_row, "tp_s")),
             fmt_decimal(get_val(dmi_hav_row, "windwave_hs_m")),
             fmt_decimal(get_val(dmi_hav_row, "windwave_tp_s")),
             deg_to_arrow(get_val(dmi_hav_row, "windwave_dir_deg")),
-            fmt_decimal(get_val(dmi_hav_row, "tp_s")),
             fmt_wind(get_val(yr_row, "wind_speed_ms"), get_val(yr_row, "gust_speed_ms")),
             deg_to_arrow(get_val(yr_row, "wind_dir_deg")),
             fmt_wind(get_val(dmi_land_row, "wind_speed_ms"), get_val(dmi_land_row, "gust_speed_ms")),
