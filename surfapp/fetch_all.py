@@ -1,5 +1,6 @@
 import os
 import csv
+import io
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from email.utils import parsedate_to_datetime
@@ -30,6 +31,88 @@ def write_last_run_timestamp(dt: datetime) -> None:
     ensure_dir(CACHE_DIR)
     with open(LAST_RUN_FILE, "w", encoding="utf-8") as f:
         f.write(dt.astimezone(UTC).isoformat())
+
+
+def load_existing_csv(path: str) -> tuple[list[str], list[dict]]:
+    if not os.path.exists(path):
+        return [], []
+    metadata: list[str] = []
+    data_lines: list[str] = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if line.startswith("#"):
+                metadata.append(line.rstrip("\n"))
+            else:
+                data_lines.append(line)
+    if not data_lines:
+        return metadata, []
+    reader = csv.DictReader(io.StringIO("".join(data_lines)))
+    return metadata, list(reader)
+
+
+def is_blank(value) -> bool:
+    return value is None or (isinstance(value, str) and value.strip() == "")
+
+
+def prepare_entries(rows: list[dict], value_keys: list[str]) -> list[dict]:
+    entries = []
+    for row in rows:
+        ts = row.get("time_utc")
+        if not ts:
+            continue
+        dt = parse_iso_utc(str(ts))
+        data = {key: row.get(key) for key in value_keys}
+        entries.append({"dt": dt, "data": data})
+    return entries
+
+
+def prepare_new_entries(rows: list[dict], value_keys: list[str]) -> list[dict]:
+    entries = []
+    for row in rows:
+        dt = row.get("time_utc")
+        if dt is None:
+            continue
+        if isinstance(dt, datetime):
+            dt_utc = dt.astimezone(UTC)
+        else:
+            dt_utc = parse_iso_utc(str(dt))
+        data = {key: row.get(key) for key in value_keys}
+        entries.append({"dt": dt_utc, "data": data})
+    return entries
+
+
+def merge_entries(new_entries: list[dict], existing_entries: list[dict], value_keys: list[str]) -> list[dict]:
+    def iso(dt: datetime) -> str:
+        return dt.astimezone(UTC).isoformat()
+
+    existing_map = {iso(entry["dt"]): entry for entry in existing_entries}
+    new_map = {iso(entry["dt"]): entry for entry in new_entries}
+
+    earliest_dt = min((entry["dt"] for entry in new_entries), default=None)
+
+    merged: dict[str, dict] = {}
+    for key, entry in new_map.items():
+        merged_data = entry["data"].copy()
+        if key in existing_map:
+            old_data = existing_map[key]["data"]
+            for field in value_keys:
+                new_val = merged_data.get(field)
+                if is_blank(new_val) and field in old_data and not is_blank(old_data.get(field)):
+                    merged_data[field] = old_data[field]
+        merged[key] = {"dt": entry["dt"], "data": merged_data}
+
+    if earliest_dt is not None:
+        cutoff = earliest_dt - timedelta(hours=2)
+        for key, entry in existing_map.items():
+            if key in merged:
+                continue
+            dt = entry["dt"]
+            if cutoff <= dt < earliest_dt:
+                merged[key] = entry
+    else:
+        merged = existing_map
+
+    return [merged[k] for k in sorted(merged.keys(), key=lambda x: merged[x]["dt"])]
 
 
 def parse_iso_utc(ts: str) -> datetime:
@@ -165,64 +248,66 @@ def write_cache_and_readable_csv(
         + verdier i value_keys
     """
 
-    if not rows:
-        print(f"[{source_name}] Ingen data – hopper over.")
-        return
-
     ensure_dir(CACHE_DIR)
     ensure_dir(PUBLIC_DIR)
 
-    # ---- Cache-fil ----
     cache_path = os.path.join(CACHE_DIR, f"{source_name}_cache.csv")
-    cache_fieldnames = ["time_utc"] + value_keys
+    public_path = os.path.join(PUBLIC_DIR, f"{source_name}_readable.csv")
 
-    metadata_lines = metadata_lines or []
+    cache_metadata_existing, cache_existing_rows = load_existing_csv(cache_path)
+    public_metadata_existing, _ = load_existing_csv(public_path)
+
+    existing_cache_entries = prepare_entries(cache_existing_rows, value_keys)
+    new_entries = prepare_new_entries(rows, value_keys)
+    merged_entries = merge_entries(new_entries, existing_cache_entries, value_keys)
+
+    if not merged_entries:
+        print(f"[{source_name}] Ingen data – hopper over.")
+        return
+
+    final_cache_metadata = metadata_lines if metadata_lines else cache_metadata_existing
+    final_public_metadata = metadata_lines if metadata_lines else public_metadata_existing
+
+    cache_fieldnames = ["time_utc"] + value_keys
+    public_fieldnames = ["time_utc", "time_local"] + value_keys
 
     with open(cache_path, "w", newline="", encoding="utf-8") as f:
-        for line in metadata_lines:
-            f.write(f"# {line}\n")
+        for line in final_cache_metadata:
+            if line.startswith("#"):
+                f.write(f"{line}\n")
+            else:
+                f.write(f"# {line}\n")
         writer = csv.DictWriter(f, fieldnames=cache_fieldnames)
         writer.writeheader()
 
-        for r in rows:
-            dt_utc = r["time_utc"]
-            if isinstance(dt_utc, datetime):
-                ts = dt_utc.astimezone(UTC).isoformat()
-            else:
-                ts = str(dt_utc)
-
+        for entry in merged_entries:
+            dt_utc = entry["dt"].astimezone(UTC)
+            ts = dt_utc.isoformat()
             row_out = {"time_utc": ts}
             for key in value_keys:
-                row_out[key] = r.get(key)
+                row_out[key] = entry["data"].get(key)
             writer.writerow(row_out)
 
-    # ---- Lesbar-fil ----
-    public_path = os.path.join(PUBLIC_DIR, f"{source_name}_readable.csv")
-    public_fieldnames = ["time_utc", "time_local"] + value_keys
-
     with open(public_path, "w", newline="", encoding="utf-8") as f:
-        for line in metadata_lines:
-            f.write(f"# {line}\n")
+        for line in final_public_metadata:
+            if line.startswith("#"):
+                f.write(f"{line}\n")
+            else:
+                f.write(f"# {line}\n")
         writer = csv.DictWriter(f, fieldnames=public_fieldnames)
         writer.writeheader()
 
-        for r in rows:
-            dt_utc = r["time_utc"]
-            if isinstance(dt_utc, datetime):
-                ts = dt_utc.astimezone(UTC).isoformat()
-                lt = to_oslo_hhmm(dt_utc)
-            else:
-                # fallback hvis noen gang er string
-                dt_parsed = parse_iso_utc(str(dt_utc))
-                ts = dt_parsed.astimezone(UTC).isoformat()
-                lt = to_oslo_hhmm(dt_parsed)
+        for entry in merged_entries:
+            dt_utc = entry["dt"]
+            ts = dt_utc.astimezone(UTC).isoformat()
+            lt = to_oslo_hhmm(dt_utc)
 
             row_out = {
                 "time_utc": ts,
                 "time_local": lt,
             }
             for key in value_keys:
-                value = r.get(key)
+                value = entry["data"].get(key)
                 if key.endswith("_dir_deg"):
                     row_out[key] = deg_to_compass(value)
                 else:

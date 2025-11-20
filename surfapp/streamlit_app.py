@@ -289,6 +289,62 @@ def get_val(row, key):
     return row.get(key)
 
 
+def to_float(value) -> Optional[float]:
+    if value in (None, "", "-"):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+CELL_COLORS = {
+    "gust": [
+        (5, "#d1ffd2"),
+        (8, "#f7ffcc"),
+        (16, "#ffefc2"),
+    ],
+    "gust_high": "#ffb3b3",
+}
+
+
+def style_wave_height(raw) -> str:
+    val = to_float(raw)
+    if val is None:
+        return ""
+    if val > 1.8:
+        return "font-weight:bold;"
+    if val < 0.8:
+        return "opacity: 0.5;"
+    return ""
+
+
+def style_period(raw) -> str:
+    val = to_float(raw)
+    if val is None:
+        return ""
+    if val > 7:
+        return "font-weight:bold;"
+    if val < 6:
+        return "opacity: 0.5;"
+    return ""
+
+
+def style_gust(raw) -> str:
+    val = to_float(raw)
+    if val is None:
+        return ""
+    if val < 5:
+        color = CELL_COLORS["gust"][0][1]
+    elif val < 8:
+        color = CELL_COLORS["gust"][1][1]
+    elif val < 16:
+        color = CELL_COLORS["gust"][2][1]
+    else:
+        color = CELL_COLORS["gust_high"]
+    return f"background-color:{color};"
+
+
 MODEL_METADATA = {
     "dmi_hav": read_metadata_from_cache("dmi_hav_lista_cache.csv") or {},
     "dmi_land": read_metadata_from_cache("dmi_land_lista_cache.csv") or {},
@@ -570,7 +626,7 @@ I dag {today_date.day}. {month_no} Lyst fra / til: <b>{header_first_light} / {he
 I morgen {tomorrow_date.day}. {MONTHS_NO[tomorrow_date.month - 1]} Lyst fra / til: <b>{format_oslo(usable_first_tomorrow, "--:--")} / {format_oslo(usable_last_tomorrow, "--:--")}</b>
 </div>
 <div class="header-line">
-Sjø: {fmt_decimal(LINDESNES_LATEST[0]) if LINDESNES_LATEST else "--"} °C (Lindesnes fyr) målt {format_obs_label(LINDESNES_LATEST[1]) if LINDESNES_LATEST and LINDESNES_LATEST[1] else "--"}
+Sjø: <b>{fmt_decimal(LINDESNES_LATEST[0]) if LINDESNES_LATEST else "--"} °C</b> (Lindesnes fyr) målt {format_obs_label(LINDESNES_LATEST[1]) if LINDESNES_LATEST and LINDESNES_LATEST[1] else "--"}
 </div>
 
 <hr>
@@ -771,7 +827,7 @@ html = f"""
 }}
 
 .model-run-wrapper {{
-    color: white !important;
+    color: grey !important;
     opacity: 0.75 !important;
     position: relative;
     z-index: 50;
@@ -842,27 +898,52 @@ for block in day_blocks:
         met_row = MET_DATA.get(dt_key)
 
         cells = [
-            fmt_decimal(get_val(dmi_hav_row, "swell_hs_m")),
-            fmt_decimal(get_val(dmi_hav_row, "swell_tp_s")),
-            deg_to_arrow(get_val(dmi_hav_row, "swell_dir_deg")),
-            fmt_decimal(get_val(dmi_hav_row, "tp_s")),
-            fmt_decimal(get_val(dmi_hav_row, "windwave_hs_m")),
-            fmt_decimal(get_val(dmi_hav_row, "windwave_tp_s")),
-            deg_to_arrow(get_val(dmi_hav_row, "windwave_dir_deg")),
-            fmt_wind(get_val(yr_row, "wind_speed_ms"), get_val(yr_row, "gust_speed_ms")),
-            deg_to_arrow(get_val(yr_row, "wind_dir_deg")),
-            fmt_wind(get_val(dmi_land_row, "wind_speed_ms"), get_val(dmi_land_row, "gust_speed_ms")),
-            deg_to_arrow(get_val(dmi_land_row, "wind_dir_deg")),
-            fmt_integer(get_val(dmi_land_row, "temp_air_c")),
-            fmt_integer(get_val(met_row, "sea_temp_c")),
-            fmt_integer(get_val(yr_row, "cloud_cover_pct")),
-            fmt_decimal(get_val(yr_row, "precip_mm")),
+            {
+                "value": fmt_decimal(get_val(dmi_hav_row, "swell_hs_m")),
+                "style": style_wave_height(get_val(dmi_hav_row, "swell_hs_m")),
+            },
+            {
+                "value": fmt_decimal(get_val(dmi_hav_row, "swell_tp_s")),
+                "style": style_period(get_val(dmi_hav_row, "swell_tp_s")),
+            },
+            {"value": deg_to_arrow(get_val(dmi_hav_row, "swell_dir_deg")), "style": ""},
+            {
+                "value": fmt_decimal(get_val(dmi_hav_row, "tp_s")),
+                "style": style_period(get_val(dmi_hav_row, "tp_s")),
+            },
+            {
+                "value": fmt_decimal(get_val(dmi_hav_row, "windwave_hs_m")),
+                "style": style_wave_height(get_val(dmi_hav_row, "windwave_hs_m")),
+            },
+            {
+                "value": fmt_decimal(get_val(dmi_hav_row, "windwave_tp_s")),
+                "style": style_period(get_val(dmi_hav_row, "windwave_tp_s")),
+            },
+            {"value": deg_to_arrow(get_val(dmi_hav_row, "windwave_dir_deg")), "style": ""},
+            {
+                "value": fmt_wind(get_val(yr_row, "wind_speed_ms"), get_val(yr_row, "gust_speed_ms")),
+                "style": style_gust(get_val(yr_row, "gust_speed_ms")),
+            },
+            {"value": deg_to_arrow(get_val(yr_row, "wind_dir_deg")), "style": ""},
+            {
+                "value": fmt_wind(get_val(dmi_land_row, "wind_speed_ms"), get_val(dmi_land_row, "gust_speed_ms")),
+                "style": style_gust(get_val(dmi_land_row, "gust_speed_ms")),
+            },
+            {"value": deg_to_arrow(get_val(dmi_land_row, "wind_dir_deg")), "style": ""},
+            {"value": fmt_integer(get_val(dmi_land_row, "temp_air_c")), "style": ""},
+            {"value": fmt_integer(get_val(met_row, "sea_temp_c")), "style": ""},
+            {"value": fmt_integer(get_val(yr_row, "cloud_cover_pct")), "style": ""},
+            {"value": fmt_decimal(get_val(yr_row, "precip_mm")), "style": ""},
         ]
 
         html += "<tr>"
         html += f"<td>{hour_str}</td>"
-        for i, value in enumerate(cells, start=1):
-            html += f'<td style="text-align:{col_align(i)}">{value}</td>'
+        for i, cell in enumerate(cells, start=1):
+            style = cell.get("style") or ""
+            style_attr = f"text-align:{col_align(i)};"
+            if style:
+                style_attr += style
+            html += f'<td style="{style_attr}">{cell["value"]}</td>'
         html += "</tr>"
 
 html += "</tbody></table></div>"
