@@ -8,6 +8,7 @@ import json
 import re
 import subprocess
 import sys
+import shutil
 
 from modules.daylight import load_daylight_table, get_light_times
 
@@ -20,7 +21,7 @@ now_oslo = now_utc.astimezone(OSLO_TZ)
 today_date = now_oslo.date()
 
 st.set_page_config(layout="wide")
-st.write("CMEMS secret present:", "COPERNICUS_TOKEN_JSON_B64" in st.secrets)
+st.write("Has copernicusmarine CLI:", shutil.which("copernicusmarine"))
 
 # ---- Load daylight data ----
 DAYLIGHT = load_daylight_table()
