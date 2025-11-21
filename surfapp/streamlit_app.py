@@ -387,6 +387,7 @@ YR_DATA = load_cache_by_hour("yr_lista_cache.csv")
 DMI_HAV_DATA = load_cache_by_hour("dmi_hav_lista_cache.csv")
 DMI_LAND_DATA = load_cache_by_hour("dmi_land_lista_cache.csv")
 MET_DATA = load_cache_by_hour("met_lista_cache.csv")
+COP_DATA = load_cache_by_hour("copernicus_lista_cache.csv")
 def load_lindesnes_latest():
     path = os.path.join(DATA_CACHE_DIR, "lindesnes_fyr_cache.csv")
     if not os.path.exists(path):
@@ -449,12 +450,52 @@ light = get_light_times(now_utc, DAYLIGHT)
 #  Helpers to work with daylight table per date
 # ---------------------------------------------------
 
+def midpoint_dt(a: datetime, b: datetime) -> datetime:
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return a + (b - a) / 2
+
+
+def hour_before(dt: datetime) -> datetime:
+    base = dt.replace(minute=0, second=0, microsecond=0)
+    if dt.minute == 0 and dt.second == 0:
+        base -= timedelta(hours=1)
+    return base
+
+
+def hour_after(dt: datetime) -> datetime:
+    base = dt.replace(minute=0, second=0, microsecond=0)
+    return base + timedelta(hours=1 if dt.minute > 0 or dt.second > 0 else 1)
+
+
+def get_weather_for_hour(dt_oslo: datetime) -> tuple[float, float]:
+    dt_key = dt_oslo.astimezone(OSLO_TZ).replace(minute=0, second=0, microsecond=0)
+    row = YR_DATA.get(dt_key)
+    cloud = to_float(get_val(row, "cloud_cover_pct"))
+    precip = to_float(get_val(row, "precip_mm"))
+    cloud = 0.0 if cloud is None else max(0.0, min(100.0, cloud))
+    precip = 0.0 if precip is None else max(0.0, precip)
+    return cloud, precip
+
+
+def parse_frozen_dt(value: Optional[str]) -> Optional[datetime]:
+    if not isinstance(value, str):
+        return None
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        return OSLO_TZ.localize(dt)
+    return dt.astimezone(OSLO_TZ)
+
+
 def get_light_oslo_for_date(d: date, cloud_override: Optional[float] = None):
     """
-    Return interpolated (first_light_oslo, last_light_oslo) using daylight table
-    bounds blended with cloud cover near each window midpoint.
-
-    cloud_override = fixed weight (0..1) to bypass forecast data (e.g. header 50%).
+    Return adjusted (first_light_oslo, last_light_oslo) using daylight table
+    with cloud/precipitation-based rules.
     """
     # Table key is d(d).mm, e.g. "1.01", "18.11"
     date_key = f"{d.day}.{d.month:02d}".lstrip("0")
@@ -465,6 +506,8 @@ def get_light_oslo_for_date(d: date, cloud_override: Optional[float] = None):
 
     row = row.iloc[0]
     date_store_key = d.isoformat()
+    freeze_entry = CLOUD_FREEZE.setdefault(date_store_key, {})
+    freeze_updated = False
 
     def parse_utc_to_oslo(clock_str: str):
         if not isinstance(clock_str, str) or ":" not in clock_str:
@@ -473,44 +516,70 @@ def get_light_oslo_for_date(d: date, cloud_override: Optional[float] = None):
         dt_utc = datetime(d.year, d.month, d.day, h, m, tzinfo=UTC)
         return dt_utc.astimezone(OSLO_TZ)
 
+    sunrise_oslo = parse_utc_to_oslo(row["Sunrise_UTC"])
+    sunset_oslo = parse_utc_to_oslo(row["Sunset_UTC"])
     first_light_early = parse_utc_to_oslo(row["First_surf_start_UTC"])
     first_light_late = parse_utc_to_oslo(row["First_surf_end_UTC"])
     last_light_early = parse_utc_to_oslo(row["Last_surf_start_UTC"])
     last_light_late = parse_utc_to_oslo(row["Last_surf_end_UTC"])
 
-    if not all([first_light_early, first_light_late, last_light_early, last_light_late]):
+    if not all([first_light_early, first_light_late, last_light_early, last_light_late, sunrise_oslo, sunset_oslo]):
         return None, None
 
-    # Midpoints for cloud sampling
-    midpoint_first = first_light_early + (first_light_late - first_light_early) / 2
-    midpoint_last = last_light_early + (last_light_late - last_light_early) / 2
+    if cloud_override is not None:
+        morning_cloud = max(0.0, min(100.0, cloud_override * 100.0))
+        evening_cloud = morning_cloud
+        morning_precip = 0.0
+        evening_precip = 0.0
+    else:
+        morning_hour = hour_before(sunrise_oslo)
+        evening_hour = hour_after(sunset_oslo)
+        morning_cloud, morning_precip = get_weather_for_hour(morning_hour)
+        evening_cloud, evening_precip = get_weather_for_hour(evening_hour)
 
-    def resolve_weight(slot: str, midpoint: datetime) -> float:
-        if cloud_override is not None:
-            return max(0.0, min(1.0, cloud_override))
+    stored_first = parse_frozen_dt(freeze_entry.get("first"))
+    stored_last = parse_frozen_dt(freeze_entry.get("last"))
 
-        freeze_entry = CLOUD_FREEZE.get(date_store_key, {})
-        stored = freeze_entry.get(slot)
-        has_passed = d <= now_oslo.date() and now_oslo >= midpoint
+    if stored_first:
+        usable_first = stored_first
+    else:
+        if morning_cloud <= 50:
+            usable_first = first_light_early
+        else:
+            usable_first = midpoint_dt(first_light_early, first_light_late)
 
-        if has_passed and stored is not None:
-            return stored
+        if morning_precip > 0:
+            if morning_precip <= 2:
+                usable_first = first_light_late
+            else:
+                usable_first = midpoint_dt(first_light_late, sunrise_oslo)
 
-        cloud_pct = cloud_pct_for_time(midpoint)
-        weight = max(0.0, min(1.0, cloud_pct / 100.0))
+        if cloud_override is None:
+            if now_oslo.date() > d or (now_oslo.date() == d and now_oslo >= sunrise_oslo):
+                freeze_entry["first"] = usable_first.astimezone(OSLO_TZ).isoformat()
+                freeze_updated = True
 
-        if has_passed:
-            freeze_entry = CLOUD_FREEZE.setdefault(date_store_key, {})
-            freeze_entry[slot] = weight
-            save_cloud_freeze(CLOUD_FREEZE)
+    if stored_last:
+        usable_last = stored_last
+    else:
+        if evening_cloud <= 50:
+            usable_last = last_light_late
+        else:
+            usable_last = midpoint_dt(last_light_late, last_light_early)
 
-        return weight
+        if evening_precip > 0:
+            if evening_precip <= 2:
+                usable_last = last_light_early
+            else:
+                usable_last = midpoint_dt(sunset_oslo, last_light_early)
 
-    w_first = resolve_weight("first", midpoint_first)
-    w_last = resolve_weight("last", midpoint_last)
+        if cloud_override is None:
+            if now_oslo.date() > d or (now_oslo.date() == d and now_oslo >= sunset_oslo):
+                freeze_entry["last"] = usable_last.astimezone(OSLO_TZ).isoformat()
+                freeze_updated = True
 
-    usable_first = first_light_early + (first_light_late - first_light_early) * w_first
-    usable_last = last_light_late - (last_light_late - last_light_early) * w_last
+    if freeze_updated:
+        save_cloud_freeze(CLOUD_FREEZE)
 
     return usable_first, usable_last
 
@@ -717,11 +786,15 @@ ALIGN = {
     1: "right", 2: "center", 3: "left",
     4: "center",
     5: "right", 6: "center", 7: "left",
-    8: "right", 9: "left",
-    10: "right", 11: "left",
-    12: "center", 13: "center",
-    14: "center", 15: "center",
+    8: "right", 9: "center", 10: "left",
+    11: "right", 12: "center", 13: "left",
+    14: "right", 15: "center", 16: "left",
+    17: "right", 18: "left",
+    19: "right", 20: "left",
+    21: "center", 22: "center",
+    23: "center", 24: "center",
 }
+DATA_COLUMNS = len(ALIGN)
 
 def col_align(i):
     return ALIGN.get(i, "center")
@@ -848,6 +921,9 @@ html = f"""
     <th colspan="3">Dønning (DMI)</th>
     <th>P.dom.</th>
     <th colspan="3">Vindbølger (DMI)</th>
+    <th colspan="3">Vindbølger (CMEMS)</th>
+    <th colspan="3">Swell (CMEMS)</th>
+    <th colspan="3">2nd Swell (CMEMS)</th>
     <th colspan="2">Vind (Yr)</th>
     <th colspan="2">Vind (DMI)</th>
     <th colspan="2">Temp (°C)</th>
@@ -863,14 +939,23 @@ html = f"""
     <th style="text-align:{col_align(5)}">(m)</th>
     <th style="text-align:{col_align(6)}">(s)</th>
     <th style="text-align:{col_align(7)}"></th>
-    <th style="text-align:{col_align(8)}">(m/s)</th>
-    <th style="text-align:{col_align(9)}"></th>
-    <th style="text-align:{col_align(10)}">(m/s)</th>
-    <th style="text-align:{col_align(11)}"></th>
-    <th style="text-align:{col_align(12)}">Luft</th>
-    <th style="text-align:{col_align(13)}">Sjø</th>
-    <th style="text-align:{col_align(14)}">(%)</th>
-    <th style="text-align:{col_align(15)}">(mm)</th>
+    <th style="text-align:{col_align(8)}">(m)</th>
+    <th style="text-align:{col_align(9)}">(s)</th>
+    <th style="text-align:{col_align(10)}"></th>
+    <th style="text-align:{col_align(11)}">(m)</th>
+    <th style="text-align:{col_align(12)}">(s)</th>
+    <th style="text-align:{col_align(13)}"></th>
+    <th style="text-align:{col_align(14)}">(m)</th>
+    <th style="text-align:{col_align(15)}">(s)</th>
+    <th style="text-align:{col_align(16)}"></th>
+    <th style="text-align:{col_align(17)}">(m/s)</th>
+    <th style="text-align:{col_align(18)}"></th>
+    <th style="text-align:{col_align(19)}">(m/s)</th>
+    <th style="text-align:{col_align(20)}"></th>
+    <th style="text-align:{col_align(21)}">Luft</th>
+    <th style="text-align:{col_align(22)}">Sjø</th>
+    <th style="text-align:{col_align(23)}">(%)</th>
+    <th style="text-align:{col_align(24)}">(mm)</th>
 </tr>
 </thead>
 
@@ -885,7 +970,7 @@ for block in day_blocks:
         html += f"""
         <tr class="day-separator">
             <td></td>
-            <td colspan="15">{label}</td>
+            <td colspan="{DATA_COLUMNS}">{label}</td>
         </tr>
         """
 
@@ -896,6 +981,7 @@ for block in day_blocks:
         dmi_hav_row = DMI_HAV_DATA.get(dt_key)
         dmi_land_row = DMI_LAND_DATA.get(dt_key)
         met_row = MET_DATA.get(dt_key)
+        cop_row = COP_DATA.get(dt_key)
 
         cells = [
             {
@@ -920,6 +1006,33 @@ for block in day_blocks:
                 "style": style_period(get_val(dmi_hav_row, "windwave_tp_s")),
             },
             {"value": deg_to_arrow(get_val(dmi_hav_row, "windwave_dir_deg")), "style": ""},
+            {
+                "value": fmt_decimal(get_val(cop_row, "WW_Hs (m)")),
+                "style": style_wave_height(get_val(cop_row, "WW_Hs (m)")),
+            },
+            {
+                "value": fmt_decimal(get_val(cop_row, "WW_Tm01 (s)")),
+                "style": style_period(get_val(cop_row, "WW_Tm01 (s)")),
+            },
+            {"value": deg_to_arrow(get_val(cop_row, "WW_Dir (°)")), "style": ""},
+            {
+                "value": fmt_decimal(get_val(cop_row, "S1_Hs (m)")),
+                "style": style_wave_height(get_val(cop_row, "S1_Hs (m)")),
+            },
+            {
+                "value": fmt_decimal(get_val(cop_row, "S1_Tm01 (s)")),
+                "style": style_period(get_val(cop_row, "S1_Tm01 (s)")),
+            },
+            {"value": deg_to_arrow(get_val(cop_row, "S1_Dir (°)")), "style": ""},
+            {
+                "value": fmt_decimal(get_val(cop_row, "S2_Hs (m)")),
+                "style": style_wave_height(get_val(cop_row, "S2_Hs (m)")),
+            },
+            {
+                "value": fmt_decimal(get_val(cop_row, "S2_Tm01 (s)")),
+                "style": style_period(get_val(cop_row, "S2_Tm01 (s)")),
+            },
+            {"value": deg_to_arrow(get_val(cop_row, "S2_Dir (°)")), "style": ""},
             {
                 "value": fmt_wind(get_val(yr_row, "wind_speed_ms"), get_val(yr_row, "gust_speed_ms")),
                 "style": style_gust(get_val(yr_row, "gust_speed_ms")),

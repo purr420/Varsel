@@ -5,8 +5,15 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from email.utils import parsedate_to_datetime
 
+import pandas as pd
 import requests
 import pytz
+import subprocess
+import xarray as xr
+from dotenv import load_dotenv
+import re
+
+load_dotenv()
 
 # ---------------------------------------------------
 #  Konfig
@@ -21,6 +28,12 @@ PUBLIC_DIR = os.path.join(BASE_DIR, "data_public") # lesbare CSV-er
 LAST_RUN_FILE = os.path.join(CACHE_DIR, "fetch_all_last_run.txt")
 DMI_API_KEY_EDR = "ae501bfc-112e-400e-89df-77a2a6b9af72"
 DMI_API_KEY_STAC = "a4b09032-bca5-4255-ac85-6fea95a1e02c"
+COPERNICUS_LAT = 58.10
+COPERNICUS_LON = 6.56
+COPERNICUS_FORECAST_HOURS = 132
+COPERNICUS_DATASET = "cmems_mod_nws_wav_anfc_0.027deg_PT1H-i"
+COPERNICUS_RAW_FILE = os.path.join(CACHE_DIR, "copernicus_lista_raw.nc")
+COPERNICUS_PUBLIC_FILE = os.path.join(PUBLIC_DIR, "copernicus_lista_readable.csv")
 
 
 def ensure_dir(path: str) -> None:
@@ -81,7 +94,12 @@ def prepare_new_entries(rows: list[dict], value_keys: list[str]) -> list[dict]:
     return entries
 
 
-def merge_entries(new_entries: list[dict], existing_entries: list[dict], value_keys: list[str]) -> list[dict]:
+def merge_entries(
+    new_entries: list[dict],
+    existing_entries: list[dict],
+    value_keys: list[str],
+    history_hours: int = 3,
+) -> list[dict]:
     def iso(dt: datetime) -> str:
         return dt.astimezone(UTC).isoformat()
 
@@ -102,7 +120,7 @@ def merge_entries(new_entries: list[dict], existing_entries: list[dict], value_k
         merged[key] = {"dt": entry["dt"], "data": merged_data}
 
     if earliest_dt is not None:
-        cutoff = earliest_dt - timedelta(hours=2)
+        cutoff = earliest_dt - timedelta(hours=history_hours)
         for key, entry in existing_map.items():
             if key in merged:
                 continue
@@ -115,14 +133,55 @@ def merge_entries(new_entries: list[dict], existing_entries: list[dict], value_k
     return [merged[k] for k in sorted(merged.keys(), key=lambda x: merged[x]["dt"])]
 
 
+def parse_meta_time(value) -> Optional[datetime]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.astimezone(UTC)
+    try:
+        return parse_iso_utc(str(value))
+    except Exception:
+        return None
+
+
+ISO_TZ_RE = re.compile(r"([+-]\d{2}:\d{2})$")
+
+
+def _normalize_iso_fraction(ts: str) -> str:
+    """
+    Ensure fractional seconds have max 6 digits so datetime.fromisoformat accepts string.
+    """
+    tz = ""
+    match = ISO_TZ_RE.search(ts)
+    if match:
+        tz = match.group(1)
+        ts = ts[: -len(tz)]
+    if "." not in ts:
+        return ts + tz
+    base, rest = ts.split(".", 1)
+    digits_match = re.match(r"(\d+)", rest)
+    if not digits_match:
+        return ts + tz
+    digits = digits_match.group(1)
+    if len(digits) > 6:
+        digits = digits[:6]
+    elif len(digits) < 6:
+        digits = digits.ljust(6, "0")
+    return f"{base}.{digits}{tz}"
+
+
 def parse_iso_utc(ts: str) -> datetime:
     """
     Parse ISO8601 med evt. 'Z' til aware UTC-datetime.
     """
-    # Yr og MET bruker typisk 2024-11-18T12:00:00Z
+    ts = ts.strip()
     if ts.endswith("Z"):
-        ts = ts.replace("Z", "+00:00")
-    dt = datetime.fromisoformat(ts)
+        ts = ts[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(ts)
+    except ValueError:
+        norm = _normalize_iso_fraction(ts)
+        dt = datetime.fromisoformat(norm)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     else:
@@ -237,6 +296,8 @@ def write_cache_and_readable_csv(
     rows: list[dict],
     value_keys: list[str],
     metadata_lines: Optional[list[str]] = None,
+    history_hours: int = 3,
+    replace_existing: bool = False,
 ) -> None:
     """
     Lagrer:
@@ -254,19 +315,27 @@ def write_cache_and_readable_csv(
     cache_path = os.path.join(CACHE_DIR, f"{source_name}_cache.csv")
     public_path = os.path.join(PUBLIC_DIR, f"{source_name}_readable.csv")
 
-    cache_metadata_existing, cache_existing_rows = load_existing_csv(cache_path)
-    public_metadata_existing, _ = load_existing_csv(public_path)
+    if replace_existing:
+        new_entries = prepare_new_entries(rows, value_keys)
+        merged_entries = new_entries
+        final_cache_metadata = metadata_lines or []
+        final_public_metadata = metadata_lines or []
+    else:
+        cache_metadata_existing, cache_existing_rows = load_existing_csv(cache_path)
+        public_metadata_existing, _ = load_existing_csv(public_path)
 
-    existing_cache_entries = prepare_entries(cache_existing_rows, value_keys)
-    new_entries = prepare_new_entries(rows, value_keys)
-    merged_entries = merge_entries(new_entries, existing_cache_entries, value_keys)
+        existing_cache_entries = prepare_entries(cache_existing_rows, value_keys)
+        new_entries = prepare_new_entries(rows, value_keys)
+        merged_entries = merge_entries(
+            new_entries, existing_cache_entries, value_keys, history_hours=history_hours
+        )
 
-    if not merged_entries:
-        print(f"[{source_name}] Ingen data – hopper over.")
-        return
+        if not merged_entries:
+            print(f"[{source_name}] Ingen data – hopper over.")
+            return
 
-    final_cache_metadata = metadata_lines if metadata_lines else cache_metadata_existing
-    final_public_metadata = metadata_lines if metadata_lines else public_metadata_existing
+        final_cache_metadata = metadata_lines if metadata_lines else cache_metadata_existing
+        final_public_metadata = metadata_lines if metadata_lines else public_metadata_existing
 
     cache_fieldnames = ["time_utc"] + value_keys
     public_fieldnames = ["time_utc", "time_local"] + value_keys
@@ -559,6 +628,178 @@ def fetch_met_lista() -> tuple[list[dict], dict]:
 
 
 # ---------------------------------------------------
+#  Copernicus – bølger
+# ---------------------------------------------------
+
+def fetch_copernicus_lista() -> bool:
+    ensure_dir(CACHE_DIR)
+    ensure_dir(PUBLIC_DIR)
+    for path in (COPERNICUS_RAW_FILE, COPERNICUS_PUBLIC_FILE):
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    now = datetime.now(UTC)
+    run_hour = 0 if now.hour < 12 else 12
+    run_time = datetime(now.year, now.month, now.day, run_hour, tzinfo=UTC)
+    desired_start = run_time - timedelta(hours=12)
+    desired_end = run_time + timedelta(hours=120)
+
+    start_str = desired_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_str = desired_end.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    cmd = [
+        "copernicusmarine",
+        "subset",
+        "--dataset-id",
+        COPERNICUS_DATASET,
+        "--variable",
+        "VHM0",
+        "--variable",
+        "VTPK",
+        "--variable",
+        "VTM02",
+        "--variable",
+        "VTM10",
+        "--variable",
+        "VPED",
+        "--variable",
+        "VHM0_WW",
+        "--variable",
+        "VTM01_WW",
+        "--variable",
+        "VMDR_WW",
+        "--variable",
+        "VHM0_SW1",
+        "--variable",
+        "VTM01_SW1",
+        "--variable",
+        "VMDR_SW1",
+        "--variable",
+        "VHM0_SW2",
+        "--variable",
+        "VTM01_SW2",
+        "--variable",
+        "VMDR_SW2",
+        "--minimum-longitude",
+        str(COPERNICUS_LON - 0.02),
+        "--maximum-longitude",
+        str(COPERNICUS_LON + 0.02),
+        "--minimum-latitude",
+        str(COPERNICUS_LAT - 0.02),
+        "--maximum-latitude",
+        str(COPERNICUS_LAT + 0.02),
+        "--start-datetime",
+        start_str,
+        "--end-datetime",
+        end_str,
+        "--output-filename",
+        COPERNICUS_RAW_FILE,
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except FileNotFoundError:
+        print("[copernicus] Fant ikke 'copernicusmarine' CLI – installer den før kjøring.")
+        return False
+    except subprocess.CalledProcessError as exc:
+        err = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+        print(f"[copernicus] ❌ Feil ved nedlasting: {err}")
+        return False
+
+    try:
+        ds = xr.open_dataset(COPERNICUS_RAW_FILE)
+        pt = ds.sel(latitude=COPERNICUS_LAT, longitude=COPERNICUS_LON, method="nearest")
+    except Exception as exc:
+        print(f"[copernicus] ❌ Kunne ikke åpne/velge punkt: {exc}")
+        try:
+            ds.close()
+        except Exception:
+            pass
+        return False
+
+    times = pd.to_datetime(pt["time"].values).tz_localize(UTC)
+
+    times = pd.to_datetime(pt["time"].values).tz_localize(UTC)
+    value_keys = [
+        "Total_Hs (m)",
+        "Total_Tp (s)",
+        "Total_Tm02 (s)",
+        "Total_Tm10 (s)",
+        "Total_Dir (°)",
+        "Total_Dir_Compass",
+        "WW_Hs (m)",
+        "WW_Tm01 (s)",
+        "WW_Dir (°)",
+        "WW_Dir_Compass",
+        "S1_Hs (m)",
+        "S1_Tm01 (s)",
+        "S1_Dir (°)",
+        "S1_Dir_Compass",
+        "S2_Hs (m)",
+        "S2_Tm01 (s)",
+        "S2_Dir (°)",
+        "S2_Dir_Compass",
+    ]
+
+    rows_for_merge: list[dict] = []
+    for idx, dt in enumerate(times):
+        data = {
+            "time_utc": dt.to_pydatetime(),
+            "Total_Hs (m)": float(pt["VHM0"].values[idx].round(1)),
+            "Total_Tp (s)": float(pt["VTPK"].values[idx].round(1)),
+            "Total_Tm02 (s)": float(pt["VTM02"].values[idx].round(1)),
+            "Total_Tm10 (s)": float(pt["VTM10"].values[idx].round(1)),
+            "Total_Dir (°)": float(pt["VPED"].values[idx].round(0)),
+            "Total_Dir_Compass": deg_to_compass(pt["VPED"].values[idx]),
+            "WW_Hs (m)": float(pt["VHM0_WW"].values[idx].round(1)),
+            "WW_Tm01 (s)": float(pt["VTM01_WW"].values[idx].round(1)),
+            "WW_Dir (°)": float(pt["VMDR_WW"].values[idx].round(0)),
+            "WW_Dir_Compass": deg_to_compass(pt["VMDR_WW"].values[idx]),
+            "S1_Hs (m)": float(pt["VHM0_SW1"].values[idx].round(1)),
+            "S1_Tm01 (s)": float(pt["VTM01_SW1"].values[idx].round(1)),
+            "S1_Dir (°)": float(pt["VMDR_SW1"].values[idx].round(0)),
+            "S1_Dir_Compass": deg_to_compass(pt["VMDR_SW1"].values[idx]),
+            "S2_Hs (m)": float(pt["VHM0_SW2"].values[idx].round(1)),
+            "S2_Tm01 (s)": float(pt["VTM01_SW2"].values[idx].round(1)),
+            "S2_Dir (°)": float(pt["VMDR_SW2"].values[idx].round(0)),
+            "S2_Dir_Compass": deg_to_compass(pt["VMDR_SW2"].values[idx]),
+        }
+        rows_for_merge.append(data)
+
+    actual_lat = float(pt["latitude"].values)
+    actual_lon = float(pt["longitude"].values)
+
+    meta_lines: list[str] = [
+        "Model run (UTC): " + run_time.strftime("%Y-%m-%d %H:%M"),
+        "Hindcast window (UTC): "
+        + desired_start.strftime("%Y-%m-%d %H:%M")
+        + " -> "
+        + run_time.strftime("%Y-%m-%d %H:%M"),
+        "Forecast window (UTC): "
+        + run_time.strftime("%Y-%m-%d %H:%M")
+        + " -> "
+        + desired_end.strftime("%Y-%m-%d %H:%M"),
+    ]
+    meta_lines.append(f"Grid point (lat,lon): {actual_lat:.4f}, {actual_lon:.4f}")
+    meta_lines.append(f"Dataset: {COPERNICUS_DATASET}")
+
+    ds.close()
+
+    write_cache_and_readable_csv(
+        "copernicus_lista",
+        rows_for_merge,
+        value_keys,
+        metadata_lines=meta_lines,
+        history_hours=3,
+        replace_existing=True,
+    )
+
+    print(f"[copernicus] Raw: {COPERNICUS_RAW_FILE}")
+    print(f"[copernicus] Lesbar: {COPERNICUS_PUBLIC_FILE}")
+    return True
+# ---------------------------------------------------
 #  Lindesnes fyr – observasjon sjøtemperatur
 # ---------------------------------------------------
 
@@ -746,6 +987,9 @@ def main():
             lind_rows,
             ["sea_temp_raw", "sea_temp_c", "obs_date_label"],
         )
+
+    # 6) Copernicus
+    fetch_copernicus_lista()
 
 
 if __name__ == "__main__":

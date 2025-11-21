@@ -3,3 +3,5 @@ requests
 pytz
 pandas
 beautifulsoup4
+xarray
+python-dotenv
