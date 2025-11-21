@@ -40,6 +40,9 @@ COPERNICUS_PUBLIC_FILE = os.path.join(PUBLIC_DIR, "copernicus_lista_readable.csv
 COPERNICUS_TOKEN_PATH = os.path.expanduser(
     "~/.config/copernicusmarine/cmems-api-token.json"
 )
+COPERNICUS_CREDENTIALS_PATH = os.path.expanduser(
+    "~/.copernicusmarine/.copernicusmarine-credentials"
+)
 
 
 def ensure_dir(path: str) -> None:
@@ -52,50 +55,74 @@ def write_last_run_timestamp(dt: datetime) -> None:
         f.write(dt.astimezone(UTC).isoformat())
 
 
-def ensure_copernicus_token() -> bool:
-    """
-    Ensure the CopernicusMarine token file exists locally.
-    Allows deployment environments (e.g., Streamlit Cloud) to inject the token
-    via environment variable COPERNICUS_TOKEN_JSON or base64 variants.
-    """
-    if os.path.exists(COPERNICUS_TOKEN_PATH):
+def ensure_copernicus_auth() -> bool:
+    """Ensure either token JSON or legacy credential file is available."""
+
+    token_exists = os.path.exists(COPERNICUS_TOKEN_PATH)
+    cred_exists = os.path.exists(COPERNICUS_CREDENTIALS_PATH)
+    if token_exists or cred_exists:
         return True
 
-    token_json = os.getenv("COPERNICUS_TOKEN_JSON")
-    if not token_json:
-        token_b64 = (
-            os.getenv("COPERNICUS_TOKEN_JSON_B64")
-            or os.getenv("COPERNICUS_TOKEN_JSON_BASE64")
-        )
-        if token_b64:
-            try:
-                token_json = base64.b64decode(token_b64).decode("utf-8")
-            except (binascii.Error, UnicodeDecodeError):
-                print("[copernicus] ❌ Ugyldig base64-token – hopper over.")
-                return False
+    raw_payload = os.getenv("COPERNICUS_TOKEN_JSON")
+    fallback_b64 = os.getenv("COPERNICUS_TOKEN_JSON_B64") or os.getenv(
+        "COPERNICUS_TOKEN_JSON_BASE64"
+    )
 
-    if not token_json:
+    def try_decode(value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+        stripped = value.strip()
+        try:
+            decoded = base64.b64decode(stripped, validate=True)
+            return decoded.decode("utf-8")
+        except (binascii.Error, UnicodeDecodeError):
+            return value
+
+    payload = None
+    if raw_payload:
+        payload = try_decode(raw_payload)
+    if (not payload) and fallback_b64:
+        payload = try_decode(fallback_b64)
+
+    if not payload:
         print(
-            "[copernicus] Fant ikke token-fil eller COPERNICUS_TOKEN_JSON – hopper over."
+            "[copernicus] Fant ikke token eller credentials i miljøet – hopper over."
         )
         return False
 
-    try:
-        parsed = json.loads(token_json)
-    except json.JSONDecodeError:
-        print("[copernicus] ❌ Token-JSON kunne ikke parses – hopper over.")
-        return False
+    stripped = payload.strip()
+    looks_json = stripped.startswith("{") or stripped.startswith("[")
+    looks_credentials = "username=" in stripped or stripped.startswith("[credentials]")
 
-    token_dir = os.path.dirname(COPERNICUS_TOKEN_PATH)
-    os.makedirs(token_dir, exist_ok=True)
-    try:
-        with open(COPERNICUS_TOKEN_PATH, "w", encoding="utf-8") as f:
-            json.dump(parsed, f)
-    except OSError as exc:
-        print(f"[copernicus] ❌ Kunne ikke skrive token-fil: {exc}")
-        return False
+    if looks_json:
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            print("[copernicus] ❌ Token-JSON kunne ikke parses – hopper over.")
+            return False
+        token_dir = os.path.dirname(COPERNICUS_TOKEN_PATH)
+        os.makedirs(token_dir, exist_ok=True)
+        try:
+            with open(COPERNICUS_TOKEN_PATH, "w", encoding="utf-8") as f:
+                json.dump(parsed, f)
+        except OSError as exc:
+            print(f"[copernicus] ❌ Kunne ikke skrive token-fil: {exc}")
+            return False
+        return True
 
-    return True
+    if looks_credentials:
+        cred_dir = os.path.dirname(COPERNICUS_CREDENTIALS_PATH)
+        os.makedirs(cred_dir, exist_ok=True)
+        try:
+            with open(COPERNICUS_CREDENTIALS_PATH, "w", encoding="utf-8") as f:
+                f.write(stripped)
+        except OSError as exc:
+            print(f"[copernicus] ❌ Kunne ikke skrive credentials-fil: {exc}")
+            return False
+        return True
+
+    print("[copernicus] ❌ Ukjent token-format – hopper over.")
+    return False
 
 
 def load_existing_csv(path: str) -> tuple[list[str], list[dict]]:
@@ -686,7 +713,7 @@ def fetch_met_lista() -> tuple[list[dict], dict]:
 def fetch_copernicus_lista() -> bool:
     ensure_dir(CACHE_DIR)
     ensure_dir(PUBLIC_DIR)
-    if not ensure_copernicus_token():
+    if not ensure_copernicus_auth():
         return False
     for path in (COPERNICUS_RAW_FILE, COPERNICUS_PUBLIC_FILE):
         if os.path.exists(path):
