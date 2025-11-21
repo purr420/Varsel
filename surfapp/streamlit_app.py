@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import shutil
+import os
 
 from modules.daylight import load_daylight_table, get_light_times
 
@@ -21,7 +22,10 @@ now_oslo = now_utc.astimezone(OSLO_TZ)
 today_date = now_oslo.date()
 
 st.set_page_config(layout="wide")
-st.write("Has copernicusmarine CLI:", shutil.which("copernicusmarine"))
+st.write(
+    "Cred file exists:",
+    os.path.exists(os.path.expanduser("~/.copernicusmarine/.copernicusmarine-credentials")),
+)
 
 # ---- Load daylight data ----
 DAYLIGHT = load_daylight_table()
