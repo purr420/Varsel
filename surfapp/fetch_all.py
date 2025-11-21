@@ -1,6 +1,9 @@
 import os
 import csv
 import io
+import json
+import base64
+import binascii
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from email.utils import parsedate_to_datetime
@@ -34,6 +37,9 @@ COPERNICUS_FORECAST_HOURS = 132
 COPERNICUS_DATASET = "cmems_mod_nws_wav_anfc_0.027deg_PT1H-i"
 COPERNICUS_RAW_FILE = os.path.join(CACHE_DIR, "copernicus_lista_raw.nc")
 COPERNICUS_PUBLIC_FILE = os.path.join(PUBLIC_DIR, "copernicus_lista_readable.csv")
+COPERNICUS_TOKEN_PATH = os.path.expanduser(
+    "~/.config/copernicusmarine/cmems-api-token.json"
+)
 
 
 def ensure_dir(path: str) -> None:
@@ -44,6 +50,52 @@ def write_last_run_timestamp(dt: datetime) -> None:
     ensure_dir(CACHE_DIR)
     with open(LAST_RUN_FILE, "w", encoding="utf-8") as f:
         f.write(dt.astimezone(UTC).isoformat())
+
+
+def ensure_copernicus_token() -> bool:
+    """
+    Ensure the CopernicusMarine token file exists locally.
+    Allows deployment environments (e.g., Streamlit Cloud) to inject the token
+    via environment variable COPERNICUS_TOKEN_JSON or base64 variants.
+    """
+    if os.path.exists(COPERNICUS_TOKEN_PATH):
+        return True
+
+    token_json = os.getenv("COPERNICUS_TOKEN_JSON")
+    if not token_json:
+        token_b64 = (
+            os.getenv("COPERNICUS_TOKEN_JSON_B64")
+            or os.getenv("COPERNICUS_TOKEN_JSON_BASE64")
+        )
+        if token_b64:
+            try:
+                token_json = base64.b64decode(token_b64).decode("utf-8")
+            except (binascii.Error, UnicodeDecodeError):
+                print("[copernicus] ❌ Ugyldig base64-token – hopper over.")
+                return False
+
+    if not token_json:
+        print(
+            "[copernicus] Fant ikke token-fil eller COPERNICUS_TOKEN_JSON – hopper over."
+        )
+        return False
+
+    try:
+        parsed = json.loads(token_json)
+    except json.JSONDecodeError:
+        print("[copernicus] ❌ Token-JSON kunne ikke parses – hopper over.")
+        return False
+
+    token_dir = os.path.dirname(COPERNICUS_TOKEN_PATH)
+    os.makedirs(token_dir, exist_ok=True)
+    try:
+        with open(COPERNICUS_TOKEN_PATH, "w", encoding="utf-8") as f:
+            json.dump(parsed, f)
+    except OSError as exc:
+        print(f"[copernicus] ❌ Kunne ikke skrive token-fil: {exc}")
+        return False
+
+    return True
 
 
 def load_existing_csv(path: str) -> tuple[list[str], list[dict]]:
@@ -634,6 +686,8 @@ def fetch_met_lista() -> tuple[list[dict], dict]:
 def fetch_copernicus_lista() -> bool:
     ensure_dir(CACHE_DIR)
     ensure_dir(PUBLIC_DIR)
+    if not ensure_copernicus_token():
+        return False
     for path in (COPERNICUS_RAW_FILE, COPERNICUS_PUBLIC_FILE):
         if os.path.exists(path):
             try:

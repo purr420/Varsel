@@ -5,3 +5,4 @@ pandas
 beautifulsoup4
 xarray
 python-dotenv
+copernicusmarine
