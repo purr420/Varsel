@@ -20,6 +20,7 @@ now_oslo = now_utc.astimezone(OSLO_TZ)
 today_date = now_oslo.date()
 
 st.set_page_config(layout="wide")
+st.write("CMEMS secret present:", "COPERNICUS_TOKEN_JSON_B64" in st.secrets)
 
 # ---- Load daylight data ----
 DAYLIGHT = load_daylight_table()
