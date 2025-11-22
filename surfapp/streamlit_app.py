@@ -204,7 +204,7 @@ def try_parse_float(value):
 
 def load_cache_by_hour(filename):
     """
-    Load a cache CSV into a dict keyed by local Oslo hour.
+    Load a cache CSV into a dict keyed by UTC hour.
     """
     path = os.path.join(DATA_CACHE_DIR, filename)
     data = {}
@@ -223,14 +223,14 @@ def load_cache_by_hour(filename):
                 continue
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=UTC)
-            dt_oslo = dt.astimezone(OSLO_TZ).replace(minute=0, second=0, microsecond=0)
+            dt_utc = dt.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
 
             parsed = {}
             for key, val in row.items():
                 if key == "time_utc":
                     continue
                 parsed[key] = try_parse_float(val)
-            data[dt_oslo] = parsed
+            data[dt_utc] = parsed
     return data
 
 
@@ -801,11 +801,13 @@ if last_today is not None:
 base_day = today_date if not skip_today else today_date + timedelta(days=1)
 
 # Determine how far to show based on DMI HAV data (fallback to 3 days)
-last_dmi_hav_dt = max(DMI_HAV_DATA.keys()) if DMI_HAV_DATA else None
+last_dmi_hav_dt_utc = max(DMI_HAV_DATA.keys()) if DMI_HAV_DATA else None
 default_end_date = base_day + timedelta(days=2)
-max_end_date = (
-    max(default_end_date, last_dmi_hav_dt.date()) if last_dmi_hav_dt else default_end_date
-)
+if last_dmi_hav_dt_utc:
+    last_dmi_hav_dt_oslo = last_dmi_hav_dt_utc.astimezone(OSLO_TZ)
+    max_end_date = max(default_end_date, last_dmi_hav_dt_oslo.date())
+else:
+    max_end_date = default_end_date
 
 # Build list of days until max_end_date (inclusive)
 days: list[date] = []
@@ -836,9 +838,10 @@ for idx, d in enumerate(days):
         start_time = day_start
 
     # Align end of forecast to last DMI HAV timestamp if present
-    if last_dmi_hav_dt and d == last_dmi_hav_dt.date():
-        last_oslo = last_dmi_hav_dt
-        day_end = last_oslo
+    if last_dmi_hav_dt_utc:
+        last_oslo = last_dmi_hav_dt_utc.astimezone(OSLO_TZ)
+        if d == last_oslo.date():
+            day_end = last_oslo
 
     # Build the list of hours for this day
     hours: list[datetime] = []
@@ -1086,13 +1089,17 @@ for block in day_blocks:
 
     for dt in hours:
         hour_str = dt.strftime("%H")
-        dt_key = dt.replace(minute=0, second=0, microsecond=0)
-        yr_row = YR_DATA.get(dt_key) or get_nearest_row(YR_DATA, dt_key, max_hours=3)
-        dmi_hav_row = DMI_HAV_DATA.get(dt_key) or get_nearest_row(DMI_HAV_DATA, dt_key, max_hours=3)
-        dmi_land_row = DMI_LAND_DATA.get(dt_key) or get_nearest_row(DMI_LAND_DATA, dt_key, max_hours=3)
+        dt_key_utc = dt.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+
+        # Yr can be sparse -> allow nearest within 3h
+        yr_row = YR_DATA.get(dt_key_utc) or get_nearest_row(YR_DATA, dt_key_utc, max_hours=3)
+
+        # Others are hourly in UTC -> exact match only
+        dmi_hav_row = DMI_HAV_DATA.get(dt_key_utc)
+        dmi_land_row = DMI_LAND_DATA.get(dt_key_utc)
         wind_row = dmi_land_row if dmi_land_row else dmi_hav_row
-        met_row = MET_DATA.get(dt_key) or get_nearest_row(MET_DATA, dt_key, max_hours=3)
-        cop_row = COP_DATA.get(dt_key) or get_nearest_row(COP_DATA, dt_key, max_hours=3)
+        met_row = MET_DATA.get(dt_key_utc)
+        cop_row = COP_DATA.get(dt_key_utc)
 
         cells = [
             {
