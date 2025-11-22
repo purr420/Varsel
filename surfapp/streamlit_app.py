@@ -234,6 +234,26 @@ def load_cache_by_hour(filename):
     return data
 
 
+def get_nearest_row(data: dict, target: datetime, max_hours: int = 3):
+    """
+    Return the row whose key is closest to target within max_hours; otherwise None.
+    """
+    if not data:
+        return None
+    closest = None
+    closest_delta = None
+    for key in data.keys():
+        delta = abs((key - target).total_seconds())
+        if closest_delta is None or delta < closest_delta:
+            closest_delta = delta
+            closest = key
+    if closest is None:
+        return None
+    if closest_delta is not None and closest_delta <= max_hours * 3600:
+        return data.get(closest)
+    return None
+
+
 def parse_iso_dt(ts: str) -> datetime:
     ts = ts.strip()
     if ts.endswith("Z"):
@@ -780,8 +800,19 @@ if last_today is not None:
 # Base day: today (normal) or tomorrow (if we skip today)
 base_day = today_date if not skip_today else today_date + timedelta(days=1)
 
-# Prepare three days: base, base+1, base+2
-days = [base_day + timedelta(days=i) for i in range(3)]
+# Determine how far to show based on DMI HAV data (fallback to 3 days)
+last_dmi_hav_dt = max(DMI_HAV_DATA.keys()) if DMI_HAV_DATA else None
+default_end_date = base_day + timedelta(days=2)
+max_end_date = (
+    max(default_end_date, last_dmi_hav_dt.date()) if last_dmi_hav_dt else default_end_date
+)
+
+# Build list of days until max_end_date (inclusive)
+days: list[date] = []
+d = base_day
+while d <= max_end_date:
+    days.append(d)
+    d += timedelta(days=1)
 
 # Build blocks: each has a label and a list of hourly datetimes
 day_blocks = []
@@ -804,15 +835,34 @@ for idx, d in enumerate(days):
         # For all other days we always start at the daylight-based day_start
         start_time = day_start
 
+    # Align end of forecast to last DMI HAV timestamp if present
+    if last_dmi_hav_dt and d == last_dmi_hav_dt.date():
+        last_oslo = last_dmi_hav_dt
+        day_end = last_oslo
+
     # Build the list of hours for this day
-    hours = []
-    t = start_time
-    while t <= day_end:
-        if t.tzinfo is None:
-            t = t.replace(tzinfo=OSLO_TZ)
-        if t.date() == d:
-            hours.append(t)
-        t += timedelta(hours=1)
+    hours: list[datetime] = []
+
+    # First two displayed days => full hours
+    if idx <= 1:
+        t = start_time
+        while t <= day_end:
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=OSLO_TZ)
+            if t.date() == d:
+                hours.append(t)
+            t += timedelta(hours=1)
+    else:
+        # Days after "tomorrow": only specific 3-hour slots
+        _, last_light = get_light_oslo_for_date(d)
+        slots = [6, 9, 12, 15, 18]
+        if last_light and (last_light.hour > 18 or (last_light.hour == 18 and last_light.minute > 0)):
+            slots.append(21)
+        for hr in slots:
+            dt_candidate = datetime(d.year, d.month, d.day, hr, 0, tzinfo=OSLO_TZ)
+            if dt_candidate < start_time or dt_candidate > day_end:
+                continue
+            hours.append(dt_candidate)
 
     if not hours:
         continue
@@ -1037,9 +1087,10 @@ for block in day_blocks:
     for dt in hours:
         hour_str = dt.strftime("%H")
         dt_key = dt.replace(minute=0, second=0, microsecond=0)
-        yr_row = YR_DATA.get(dt_key)
+        yr_row = YR_DATA.get(dt_key) or get_nearest_row(YR_DATA, dt_key, max_hours=3)
         dmi_hav_row = DMI_HAV_DATA.get(dt_key)
         dmi_land_row = DMI_LAND_DATA.get(dt_key)
+        wind_row = dmi_land_row if dmi_land_row else dmi_hav_row
         met_row = MET_DATA.get(dt_key)
         cop_row = COP_DATA.get(dt_key)
 
@@ -1099,10 +1150,10 @@ for block in day_blocks:
             },
             {"value": deg_to_arrow(get_val(yr_row, "wind_dir_deg")), "style": ""},
             {
-                "value": fmt_wind(get_val(dmi_land_row, "wind_speed_ms"), get_val(dmi_land_row, "gust_speed_ms")),
-                "style": style_gust(get_val(dmi_land_row, "gust_speed_ms")),
+                "value": fmt_wind(get_val(wind_row, "wind_speed_ms"), get_val(wind_row, "gust_speed_ms")),
+                "style": style_gust(get_val(wind_row, "gust_speed_ms")),
             },
-            {"value": deg_to_arrow(get_val(dmi_land_row, "wind_dir_deg")), "style": ""},
+            {"value": deg_to_arrow(get_val(wind_row, "wind_dir_deg")), "style": ""},
             {"value": fmt_integer(get_val(dmi_land_row, "temp_air_c")), "style": ""},
             {"value": fmt_integer(get_val(met_row, "sea_temp_c")), "style": ""},
             {"value": fmt_integer(get_val(yr_row, "cloud_cover_pct")), "style": ""},
