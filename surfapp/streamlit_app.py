@@ -1,6 +1,4 @@
 import os
-from pathlib import Path
-import base64
 import streamlit as st
 from datetime import datetime, timedelta, date
 from typing import Optional
@@ -23,30 +21,6 @@ now_oslo = now_utc.astimezone(OSLO_TZ)
 today_date = now_oslo.date()
 
 # Ensure Copernicus credential file exists on Streamlit Cloud
-cred_secret = st.secrets.get("COPERNICUS_TOKEN_JSON_B64")
-if cred_secret:
-    cred_path = os.path.expanduser("~/.copernicusmarine/.copernicusmarine-credentials")
-    os.makedirs(os.path.dirname(cred_path), exist_ok=True)
-    try:
-        data = base64.b64decode(cred_secret.strip())
-        with open(cred_path, "wb") as f:
-            f.write(data)
-        st.write("Copernicus credential installed.")
-    except Exception as exc:
-        st.write("Credential write failed:", str(exc))
-else:
-    st.write("No CMEMS secret found.")
-
-cache_file = Path("surfapp/data_cache/fetch_all_last_run.txt")
-st.write("fetch_all timestamp file exists:", cache_file.exists())
-if cache_file.exists():
-    st.write("fetch_all timestamp contents:", cache_file.read_text())
-    try:
-        cache_file.unlink()
-        st.write("Deleted timestamp file — next run will fetch.")
-    except OSError as exc:
-        st.write("Could not delete timestamp file:", str(exc))
-
 st.set_page_config(layout="wide")
 
 # ---- Load daylight data ----
@@ -90,7 +64,7 @@ def write_last_fetch_time(dt: datetime) -> None:
 
 def ensure_recent_fetch(max_age_minutes: int = 15) -> Optional[datetime]:
     last = read_last_fetch_time()
-    needs_fetch = True
+    needs_fetch = last is None or (now_utc - last) > timedelta(minutes=max_age_minutes)
     if not needs_fetch:
         return last
     try:
