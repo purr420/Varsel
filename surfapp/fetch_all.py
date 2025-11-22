@@ -126,6 +126,24 @@ def ensure_copernicus_auth() -> bool:
     return False
 
 
+def get_existing_copernicus_run() -> Optional[datetime]:
+    """Return the model_run datetime (UTC) from the existing readable CSV, or None."""
+    path = COPERNICUS_PUBLIC_FILE
+    if not os.path.exists(path):
+        return None
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("# Model run (UTC):"):
+                    ts = line.split(":", 1)[1].strip()
+                    return parse_iso_utc(ts)
+    except Exception:
+        return None
+
+    return None
+
+
 def load_existing_csv(path: str) -> tuple[list[str], list[dict]]:
     if not os.path.exists(path):
         return [], []
@@ -715,6 +733,18 @@ def fetch_copernicus_lista() -> bool:
     if DISABLE_COPERNICUS_FETCH:
         print("[copernicus] Skipping fetch (disabled via environment)")
         return False
+
+    # --- Detect if new run is available ---
+    # Copernicus runs at 00Z and 12Z. Compute most likely current run.
+    now = datetime.now(UTC)
+    expected_run_hour = 0 if now.hour < 12 else 12
+    expected_run = datetime(now.year, now.month, now.day, expected_run_hour, tzinfo=UTC)
+
+    existing_run = get_existing_copernicus_run()
+    if existing_run and existing_run == expected_run:
+        print("[copernicus] No new model-run — skipping download.")
+        return False
+
     ensure_dir(CACHE_DIR)
     ensure_dir(PUBLIC_DIR)
     if not ensure_copernicus_auth():
@@ -726,7 +756,6 @@ def fetch_copernicus_lista() -> bool:
             except OSError:
                 pass
 
-    now = datetime.now(UTC)
     run_hour = 0 if now.hour < 12 else 12
     run_time = datetime(now.year, now.month, now.day, run_hour, tzinfo=UTC)
     desired_start = run_time - timedelta(hours=12)

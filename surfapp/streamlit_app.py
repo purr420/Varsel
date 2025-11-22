@@ -389,6 +389,7 @@ MODEL_METADATA = {
     "dmi_hav": read_metadata_from_cache("dmi_hav_lista_cache.csv") or {},
     "dmi_land": read_metadata_from_cache("dmi_land_lista_cache.csv") or {},
     "yr": read_metadata_from_cache("yr_lista_cache.csv") or {},
+    "copernicus": read_metadata_from_cache("copernicus_lista_cache.csv") or {},
 }
 
 
@@ -421,6 +422,13 @@ def format_yr_metadata(meta: dict) -> Optional[str]:
     if not run_display:
         return None
     return f"Yr (Locationforecast v2): Run (UTC) {run_display}"
+
+
+def format_copernicus_metadata(meta: dict) -> Optional[str]:
+    run_display = format_run_display(meta.get("model_run"))
+    if not run_display:
+        return None
+    return f"Copernicus: Run (UTC) {run_display}"
 
 
 YR_DATA = load_cache_by_hour("yr_lista_cache.csv")
@@ -1103,6 +1111,9 @@ html += "</tbody></table></div>"
 
 footer_lines = []
 line = format_dmi_metadata("DMI (WAM NSB)", MODEL_METADATA["dmi_hav"])
+if line:
+    footer_lines.append(line)
+line = format_copernicus_metadata(MODEL_METADATA["copernicus"])
 if line:
     footer_lines.append(line)
 line = format_dmi_metadata("DMI (HARMONIE Dini SF)", MODEL_METADATA["dmi_land"])
