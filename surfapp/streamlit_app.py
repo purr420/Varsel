@@ -41,6 +41,11 @@ cache_file = Path("surfapp/data_cache/fetch_all_last_run.txt")
 st.write("fetch_all timestamp file exists:", cache_file.exists())
 if cache_file.exists():
     st.write("fetch_all timestamp contents:", cache_file.read_text())
+    try:
+        cache_file.unlink()
+        st.write("Deleted timestamp file — next run will fetch.")
+    except OSError as exc:
+        st.write("Could not delete timestamp file:", str(exc))
 
 st.set_page_config(layout="wide")
 
