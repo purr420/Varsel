@@ -27,6 +27,7 @@ st.set_page_config(layout="wide")
 DAYLIGHT = load_daylight_table()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_CACHE_DIR = os.path.join(BASE_DIR, "data_cache")
+DATA_PUBLIC_DIR = os.path.join(BASE_DIR, "data_public")
 YR_CACHE_PATH = os.path.join(DATA_CACHE_DIR, "yr_lista_cache.csv")
 CLOUD_FREEZE_PATH = os.path.join(DATA_CACHE_DIR, "cloud_freeze.json")
 FETCH_SCRIPT = os.path.join(BASE_DIR, "fetch_all.py")
@@ -73,6 +74,7 @@ def ensure_recent_fetch(max_age_minutes: int = 15) -> Optional[datetime]:
             check=True,
             capture_output=True,
             text=True,
+            env={**os.environ, "DISABLE_COPERNICUS_FETCH": "1"},
         )
         last = datetime.now(UTC)
         write_last_fetch_time(last)
@@ -232,6 +234,42 @@ def load_cache_by_hour(filename):
     return data
 
 
+def parse_iso_dt(ts: str) -> datetime:
+    ts = ts.strip()
+    if ts.endswith("Z"):
+        ts = ts[:-1] + "+00:00"
+    dt = datetime.fromisoformat(ts)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    else:
+        dt = dt.astimezone(UTC)
+    return dt
+
+
+def load_copernicus_public():
+    path = os.path.join(DATA_PUBLIC_DIR, "copernicus_lista_readable.csv")
+    data = {}
+    if not os.path.exists(path):
+        return data
+
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(line for line in f if not line.startswith("#"))
+        for row in reader:
+            ts = row.get("time_utc")
+            if not ts:
+                continue
+            try:
+                dt = parse_iso_dt(ts)
+            except ValueError:
+                continue
+            dt_oslo = dt.astimezone(OSLO_TZ).replace(minute=0, second=0, microsecond=0)
+            parsed = {}
+            for key, val in row.items():
+                if key in ("time_utc", "time_local"):
+                    continue
+                parsed[key] = try_parse_float(val)
+            data[dt_oslo] = parsed
+    return data
 def deg_to_compass(deg):
     if deg is None:
         return "-"
@@ -389,7 +427,7 @@ YR_DATA = load_cache_by_hour("yr_lista_cache.csv")
 DMI_HAV_DATA = load_cache_by_hour("dmi_hav_lista_cache.csv")
 DMI_LAND_DATA = load_cache_by_hour("dmi_land_lista_cache.csv")
 MET_DATA = load_cache_by_hour("met_lista_cache.csv")
-COP_DATA = load_cache_by_hour("copernicus_lista_cache.csv")
+COP_DATA = load_copernicus_public()
 def load_lindesnes_latest():
     path = os.path.join(DATA_CACHE_DIR, "lindesnes_fyr_cache.csv")
     if not os.path.exists(path):

@@ -43,6 +43,7 @@ COPERNICUS_TOKEN_PATH = os.path.expanduser(
 COPERNICUS_CREDENTIALS_PATH = os.path.expanduser(
     "~/.copernicusmarine/.copernicusmarine-credentials"
 )
+DISABLE_COPERNICUS_FETCH = os.getenv("DISABLE_COPERNICUS_FETCH") == "1"
 
 
 def ensure_dir(path: str) -> None:
@@ -711,6 +712,9 @@ def fetch_met_lista() -> tuple[list[dict], dict]:
 # ---------------------------------------------------
 
 def fetch_copernicus_lista() -> bool:
+    if DISABLE_COPERNICUS_FETCH:
+        print("[copernicus] Skipping fetch (disabled via environment)")
+        return False
     ensure_dir(CACHE_DIR)
     ensure_dir(PUBLIC_DIR)
     if not ensure_copernicus_auth():
