@@ -428,7 +428,7 @@ def format_copernicus_metadata(meta: dict) -> Optional[str]:
     run_display = format_run_display(meta.get("model_run"))
     if not run_display:
         return None
-    return f"Copernicus: Run (UTC) {run_display}"
+    return f"Copernicus (CMEMS): Run (UTC) {run_display}"
 
 
 YR_DATA = load_cache_by_hour("yr_lista_cache.csv")
@@ -682,8 +682,20 @@ usable_first_tomorrow, usable_last_tomorrow = get_light_oslo_for_date(tomorrow_d
 
 MONTHS_NO = ["jan", "feb", "mar", "apr", "mai", "jun",
              "jul", "aug", "sep", "okt", "nov", "des"]
-MONTHS_EN = ["January", "February", "March", "April", "May", "June",
-             "July", "August", "September", "October", "November", "December"]
+MONTHS_EN = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
 month_no = MONTHS_NO[now_oslo.month - 1]
 if LAST_FETCH_UTC:
     last_fetch_oslo = LAST_FETCH_UTC.astimezone(OSLO_TZ)
