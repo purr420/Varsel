@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import base64
 import streamlit as st
 from datetime import datetime, timedelta, date
@@ -35,6 +36,11 @@ if cred_secret:
         st.write("Credential write failed:", str(exc))
 else:
     st.write("No CMEMS secret found.")
+
+cache_file = Path("surfapp/data_cache/fetch_all_last_run.txt")
+st.write("fetch_all timestamp file exists:", cache_file.exists())
+if cache_file.exists():
+    st.write("fetch_all timestamp contents:", cache_file.read_text())
 
 st.set_page_config(layout="wide")
 
