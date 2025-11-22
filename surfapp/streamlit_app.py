@@ -394,11 +394,11 @@ def style_gust(raw) -> str:
     val = to_float(raw)
     if val is None:
         return ""
-    if val < 5:
+    if val < 5.5:
         color = CELL_COLORS["gust"][0][1]
-    elif val < 8:
+    elif val < 8.5:
         color = CELL_COLORS["gust"][1][1]
-    elif val < 16:
+    elif val < 16.5:
         color = CELL_COLORS["gust"][2][1]
     else:
         color = CELL_COLORS["gust_high"]
