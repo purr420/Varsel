@@ -90,7 +90,7 @@ def write_last_fetch_time(dt: datetime) -> None:
 
 def ensure_recent_fetch(max_age_minutes: int = 15) -> Optional[datetime]:
     last = read_last_fetch_time()
-    needs_fetch = last is None or (now_utc - last) > timedelta(minutes=max_age_minutes)
+    needs_fetch = True
     if not needs_fetch:
         return last
     try:
