@@ -1088,11 +1088,11 @@ for block in day_blocks:
         hour_str = dt.strftime("%H")
         dt_key = dt.replace(minute=0, second=0, microsecond=0)
         yr_row = YR_DATA.get(dt_key) or get_nearest_row(YR_DATA, dt_key, max_hours=3)
-        dmi_hav_row = DMI_HAV_DATA.get(dt_key)
-        dmi_land_row = DMI_LAND_DATA.get(dt_key)
+        dmi_hav_row = DMI_HAV_DATA.get(dt_key) or get_nearest_row(DMI_HAV_DATA, dt_key, max_hours=3)
+        dmi_land_row = DMI_LAND_DATA.get(dt_key) or get_nearest_row(DMI_LAND_DATA, dt_key, max_hours=3)
         wind_row = dmi_land_row if dmi_land_row else dmi_hav_row
-        met_row = MET_DATA.get(dt_key)
-        cop_row = COP_DATA.get(dt_key)
+        met_row = MET_DATA.get(dt_key) or get_nearest_row(MET_DATA, dt_key, max_hours=3)
+        cop_row = COP_DATA.get(dt_key) or get_nearest_row(COP_DATA, dt_key, max_hours=3)
 
         cells = [
             {
