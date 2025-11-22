@@ -1,15 +1,15 @@
+import os
+import base64
 import streamlit as st
 from datetime import datetime, timedelta, date
 from typing import Optional
 import pytz
 import csv
-import os
 import json
 import re
 import subprocess
 import sys
 import shutil
-import os
 
 from modules.daylight import load_daylight_table, get_light_times
 
@@ -21,11 +21,22 @@ now_utc = datetime.now(UTC)
 now_oslo = now_utc.astimezone(OSLO_TZ)
 today_date = now_oslo.date()
 
+# Ensure Copernicus credential file exists on Streamlit Cloud
+cred_secret = st.secrets.get("COPERNICUS_TOKEN_JSON_B64")
+if cred_secret:
+    cred_path = os.path.expanduser("~/.copernicusmarine/.copernicusmarine-credentials")
+    os.makedirs(os.path.dirname(cred_path), exist_ok=True)
+    try:
+        data = base64.b64decode(cred_secret.strip())
+        with open(cred_path, "wb") as f:
+            f.write(data)
+        st.write("Copernicus credential installed.")
+    except Exception as exc:
+        st.write("Credential write failed:", str(exc))
+else:
+    st.write("No CMEMS secret found.")
+
 st.set_page_config(layout="wide")
-st.write(
-    "Cred file exists:",
-    os.path.exists(os.path.expanduser("~/.copernicusmarine/.copernicusmarine-credentials")),
-)
 
 # ---- Load daylight data ----
 DAYLIGHT = load_daylight_table()
