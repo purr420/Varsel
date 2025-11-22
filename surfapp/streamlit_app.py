@@ -843,6 +843,18 @@ for idx, d in enumerate(days):
         if d == last_oslo.date():
             day_end = last_oslo
 
+    # Ensure far-out days include at least 6,9,12,15,18 (and 21 if sunset > 18),
+    # except the final forecast day (which may end earlier if data ends).
+    is_last_day = d == days[-1]
+    if idx >= 2 and not is_last_day:
+        _, last_light = get_light_oslo_for_date(d)
+        min_hour = 18
+        if last_light and (last_light.hour > 18 or (last_light.hour == 18 and last_light.minute > 0)):
+            min_hour = 21
+        min_dt = datetime(d.year, d.month, d.day, min_hour, 0, tzinfo=OSLO_TZ)
+        if day_end < min_dt:
+            day_end = min_dt
+
     # Build the list of hours for this day
     hours: list[datetime] = []
 
