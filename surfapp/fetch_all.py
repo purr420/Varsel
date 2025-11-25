@@ -31,6 +31,7 @@ PUBLIC_DIR = os.path.join(BASE_DIR, "data_public") # lesbare CSV-er
 LAST_RUN_FILE = os.path.join(CACHE_DIR, "fetch_all_last_run.txt")
 DMI_API_KEY_EDR = "ae501bfc-112e-400e-89df-77a2a6b9af72"
 DMI_API_KEY_STAC = "a4b09032-bca5-4255-ac85-6fea95a1e02c"
+FROST_CLIENT_ID = os.getenv("FROST_CLIENT_ID")
 COPERNICUS_LAT = 58.10
 COPERNICUS_LON = 6.56
 COPERNICUS_FORECAST_HOURS = 132
@@ -682,6 +683,70 @@ def fetch_dmi_land_lista() -> Optional[tuple[list[dict], dict]]:
 
 
 # ---------------------------------------------------
+#  Observasjoner – Lista fyr (Frost)
+# ---------------------------------------------------
+
+def fetch_observasjoner_lista() -> Optional[list[dict]]:
+    """
+    Henter siste ~6 timer vindobservasjoner fra Frost (Lista fyr).
+    """
+    if not FROST_CLIENT_ID:
+        print("[obs_lista] Mangler FROST_CLIENT_ID – hopper over.")
+        return None
+
+    base = "https://frost.met.no/observations/v0.jsonld"
+    source = "SN42160"  # Lista Fyr
+    elements = "wind_speed,wind_from_direction,max(wind_speed_of_gust PT10M)"
+
+    now = datetime.now(UTC)
+    start = now - timedelta(hours=6)
+    start_z = start.isoformat().replace("+00:00", "Z")
+    end_z = now.isoformat().replace("+00:00", "Z")
+
+    url = f"{base}?sources={source}&elements={elements}&referencetime={start_z}/{end_z}"
+
+    try:
+        r = requests.get(url, auth=(FROST_CLIENT_ID, ""), timeout=20)
+        r.raise_for_status()
+        data = r.json()
+    except requests.RequestException as exc:
+        print(f"[obs_lista] ❌ Frost-feil: {exc}")
+        return None
+    except ValueError:
+        print("[obs_lista] ❌ Ugyldig JSON fra Frost.")
+        return None
+
+    entries = []
+    for entry in data.get("data", []):
+        ts = entry.get("referenceTime")
+        obs = entry.get("observations", [])
+        vals = {o.get("elementId"): o.get("value") for o in obs}
+        wind = vals.get("wind_speed")
+        deg = vals.get("wind_from_direction")
+        gust = vals.get("max(wind_speed_of_gust PT10M)")
+
+        if ts is None:
+            continue
+        try:
+            dt = parse_iso_utc(ts)
+        except Exception:
+            continue
+
+        entries.append(
+            {
+                "time_utc": dt,
+                "wind_speed_ms": wind,
+                "wind_dir_deg": deg,
+                "gust_speed_ms": gust,
+                "wind_dir_compass": deg_to_compass(deg),
+            }
+        )
+
+    entries.sort(key=lambda x: x["time_utc"])
+    return entries
+
+
+# ---------------------------------------------------
 #  MET (hav / sjøtemperatur eller bølger)
 # ---------------------------------------------------
 
@@ -997,6 +1062,33 @@ def fetch_lindesnes_fyr() -> list[dict]:
 
 
 # ---------------------------------------------------
+#  Observasjoner Lista – skrives til cache og lesbar CSV
+# ---------------------------------------------------
+
+def write_observasjoner_lista(entries: list[dict]) -> None:
+    if not entries:
+        print("[obs_lista] Ingen observasjoner å skrive.")
+        return
+
+    value_keys = [
+        "wind_speed_ms",
+        "gust_speed_ms",
+        "wind_dir_deg",
+        "wind_dir_compass",
+    ]
+    metadata = ["Observasjoner: Lista fyr (Frost)"]
+
+    write_cache_and_readable_csv(
+        "observasjoner_lista",
+        entries,
+        value_keys,
+        metadata_lines=metadata,
+        history_hours=6,
+        replace_existing=True,
+    )
+
+
+# ---------------------------------------------------
 #  MAIN – kjør alle fetch + skriv CSV
 # ---------------------------------------------------
 
@@ -1102,7 +1194,12 @@ def main():
             ["sea_temp_raw", "sea_temp_c", "obs_date_label"],
         )
 
-    # 6) Copernicus
+    # 6) Observasjoner Lista (Frost)
+    obs_rows = fetch_observasjoner_lista()
+    if obs_rows:
+        write_observasjoner_lista(obs_rows)
+
+    # 7) Copernicus
     fetch_copernicus_lista()
 
 

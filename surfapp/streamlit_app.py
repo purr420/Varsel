@@ -410,6 +410,7 @@ MODEL_METADATA = {
     "dmi_land": read_metadata_from_cache("dmi_land_lista_cache.csv") or {},
     "yr": read_metadata_from_cache("yr_lista_cache.csv") or {},
     "copernicus": read_metadata_from_cache("copernicus_lista_cache.csv") or {},
+    "observasjoner_lista": read_metadata_from_cache("observasjoner_lista_cache.csv") or {},
 }
 
 
@@ -454,6 +455,7 @@ def format_copernicus_metadata(meta: dict) -> Optional[str]:
 YR_DATA = load_cache_by_hour("yr_lista_cache.csv")
 DMI_HAV_DATA = load_cache_by_hour("dmi_hav_lista_cache.csv")
 DMI_LAND_DATA = load_cache_by_hour("dmi_land_lista_cache.csv")
+OBS_LISTA_DATA = load_cache_by_hour("observasjoner_lista_cache.csv")
 MET_DATA = load_cache_by_hour("met_lista_cache.csv")
 COP_DATA = load_copernicus_public()
 def load_lindesnes_latest():
@@ -916,8 +918,9 @@ ALIGN = {
     14: "right", 15: "center", 16: "left",
     17: "right", 18: "left",
     19: "right", 20: "left",
-    21: "center", 22: "center",
+    21: "right", 22: "left",
     23: "center", 24: "center",
+    25: "center", 26: "center",
 }
 DATA_COLUMNS = len(ALIGN)
 
@@ -1051,6 +1054,7 @@ html = f"""
     <th colspan="3">2nd Swell (CMEMS)</th>
     <th colspan="2">Vind (Yr)</th>
     <th colspan="2">Vind (DMI)</th>
+    <th colspan="2">Vind (målt)</th>
     <th colspan="2">Temp (°C)</th>
     <th>Skydekke</th>
     <th>Nedbør</th>
@@ -1077,10 +1081,12 @@ html = f"""
     <th style="text-align:{col_align(18)}"></th>
     <th style="text-align:{col_align(19)}">(m/s)</th>
     <th style="text-align:{col_align(20)}"></th>
-    <th style="text-align:{col_align(21)}">Luft</th>
-    <th style="text-align:{col_align(22)}">Sjø</th>
-    <th style="text-align:{col_align(23)}">(%)</th>
-    <th style="text-align:{col_align(24)}">(mm)</th>
+    <th style="text-align:{col_align(21)}">(m/s)</th>
+    <th style="text-align:{col_align(22)}"></th>
+    <th style="text-align:{col_align(23)}">Luft</th>
+    <th style="text-align:{col_align(24)}">Sjø</th>
+    <th style="text-align:{col_align(25)}">(%)</th>
+    <th style="text-align:{col_align(26)}">(mm)</th>
 </tr>
 </thead>
 
@@ -1112,6 +1118,7 @@ for block in day_blocks:
         wind_row = dmi_land_row if dmi_land_row else dmi_hav_row
         met_row = MET_DATA.get(dt_key_utc)
         cop_row = COP_DATA.get(dt_key_utc)
+        obs_row = OBS_LISTA_DATA.get(dt_key_utc) or get_nearest_row(OBS_LISTA_DATA, dt_key_utc, max_hours=1)
 
         cells = [
             {
@@ -1173,6 +1180,11 @@ for block in day_blocks:
                 "style": style_gust(get_val(wind_row, "gust_speed_ms")),
             },
             {"value": deg_to_arrow(get_val(wind_row, "wind_dir_deg")), "style": ""},
+            {
+                "value": fmt_wind(get_val(obs_row, "wind_speed_ms"), get_val(obs_row, "gust_speed_ms")),
+                "style": style_gust(get_val(obs_row, "gust_speed_ms")),
+            },
+            {"value": deg_to_arrow(get_val(obs_row, "wind_dir_deg")), "style": ""},
             {"value": fmt_integer(get_val(dmi_land_row, "temp_air_c")), "style": ""},
             {"value": fmt_integer(get_val(met_row, "sea_temp_c")), "style": ""},
             {"value": fmt_integer(get_val(yr_row, "cloud_cover_pct")), "style": ""},
