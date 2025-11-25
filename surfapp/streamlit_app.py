@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import shutil
+import requests
 
 from modules.daylight import load_daylight_table, get_light_times
 
@@ -254,6 +255,64 @@ def get_nearest_row(data: dict, target: datetime, max_hours: int = 3):
     return None
 
 
+def fetch_observasjoner_lista_live():
+    """
+    Hent siste ~6 timer vindobservasjoner (Lista fyr) fra Frost direkte.
+    Bruker FROST_CLIENT_ID fra env eller st.secrets.
+    """
+    client_id = os.getenv("FROST_CLIENT_ID") or st.secrets.get("FROST_CLIENT_ID", None)
+    if not client_id:
+        return None
+
+    base = "https://frost.met.no/observations/v0.jsonld"
+    source = "SN42160"  # Lista Fyr
+    elements = "wind_speed,wind_from_direction,max(wind_speed_of_gust PT10M)"
+
+    now = datetime.now(UTC)
+    start = now - timedelta(hours=6)
+
+    start_z = start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_z = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    url = f"{base}?sources={source}&elements={elements}&referencetime={start_z}/{end_z}"
+
+    try:
+        resp = requests.get(url, auth=(client_id, ""), timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return None
+
+    obs_map = {}
+    for entry in data.get("data", []):
+        ts = entry.get("referenceTime")
+        if not ts:
+            continue
+        try:
+            dt = parse_iso_dt(ts)
+        except Exception:
+            continue
+        obs = entry.get("observations", [])
+        vals = {o.get("elementId"): o.get("value") for o in obs}
+        wind = vals.get("wind_speed")
+        deg = vals.get("wind_from_direction")
+        gust = vals.get("max(wind_speed_of_gust PT10M)")
+        obs_map[dt.astimezone(UTC).replace(microsecond=0)] = {
+            "wind_speed_ms": wind,
+            "wind_dir_deg": deg,
+            "gust_speed_ms": gust,
+            "wind_dir_compass": deg_to_compass(deg),
+        }
+
+    return obs_map or None
+
+
+def load_observasjoner_lista_data():
+    live = fetch_observasjoner_lista_live()
+    if live:
+        return live
+    return load_cache_by_hour("observasjoner_lista_cache.csv")
+
+
 def parse_iso_dt(ts: str) -> datetime:
     ts = ts.strip()
     if ts.endswith("Z"):
@@ -455,7 +514,7 @@ def format_copernicus_metadata(meta: dict) -> Optional[str]:
 YR_DATA = load_cache_by_hour("yr_lista_cache.csv")
 DMI_HAV_DATA = load_cache_by_hour("dmi_hav_lista_cache.csv")
 DMI_LAND_DATA = load_cache_by_hour("dmi_land_lista_cache.csv")
-OBS_LISTA_DATA = load_cache_by_hour("observasjoner_lista_cache.csv")
+OBS_LISTA_DATA = load_observasjoner_lista_data()
 MET_DATA = load_cache_by_hour("met_lista_cache.csv")
 COP_DATA = load_copernicus_public()
 def load_lindesnes_latest():
