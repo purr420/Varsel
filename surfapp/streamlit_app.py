@@ -1168,8 +1168,8 @@ for block in day_blocks:
         hour_str = dt.strftime("%H")
         dt_key_utc = dt.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
 
-        # Yr can be sparse -> allow nearest within 3h
-        yr_row = YR_DATA.get(dt_key_utc) or get_nearest_row(YR_DATA, dt_key_utc, max_hours=3)
+        # Yr: use exact hour (no nearest) to avoid mismatches
+        yr_row = YR_DATA.get(dt_key_utc)
 
         # Others are hourly in UTC -> exact match only
         dmi_hav_row = DMI_HAV_DATA.get(dt_key_utc)
