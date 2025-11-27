@@ -1177,7 +1177,7 @@ for block in day_blocks:
         wind_row = dmi_land_row if dmi_land_row else dmi_hav_row
         met_row = MET_DATA.get(dt_key_utc)
         cop_row = COP_DATA.get(dt_key_utc)
-        obs_row = OBS_LISTA_DATA.get(dt_key_utc) or get_nearest_row(OBS_LISTA_DATA, dt_key_utc, max_hours=1)
+        obs_row = OBS_LISTA_DATA.get(dt_key_utc)
 
         cells = [
             {
