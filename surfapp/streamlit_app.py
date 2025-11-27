@@ -102,7 +102,7 @@ def run_manual_fetch():
         now = datetime.now(UTC)
         write_last_fetch_time(now)
         st.success(f"Data oppdatert {now.astimezone(OSLO_TZ).strftime('%H:%M')}")
-        st.experimental_rerun()
+        st.rerun()
     except subprocess.CalledProcessError as exc:
         err = exc.stderr.strip() or exc.stdout.strip() or str(exc)
         st.warning(f"Kunne ikke oppdatere data: {err}")
