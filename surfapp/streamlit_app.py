@@ -90,6 +90,26 @@ def ensure_recent_fetch(max_age_minutes: int = 15) -> Optional[datetime]:
 LAST_FETCH_UTC = ensure_recent_fetch()
 
 
+def run_manual_fetch():
+    try:
+        subprocess.run(
+            [sys.executable, FETCH_SCRIPT],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "DISABLE_COPERNICUS_FETCH": "1"},
+        )
+        now = datetime.now(UTC)
+        write_last_fetch_time(now)
+        st.success(f"Data oppdatert {now.astimezone(OSLO_TZ).strftime('%H:%M')}")
+        st.experimental_rerun()
+    except subprocess.CalledProcessError as exc:
+        err = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+        st.warning(f"Kunne ikke oppdatere data: {err}")
+    except Exception as exc:
+        st.warning(f"Kunne ikke oppdatere data: {exc}")
+
+
 def load_cloud_freeze():
     if not os.path.exists(CLOUD_FREEZE_PATH):
         return {}
@@ -755,6 +775,9 @@ header_first_light = format_oslo(usable_first_today, light["first_light"])
 header_last_light = format_oslo(usable_last_today, light["last_light"])
 tomorrow_date = today_date + timedelta(days=1)
 usable_first_tomorrow, usable_last_tomorrow = get_light_oslo_for_date(tomorrow_date)
+
+# Manual refresh button (fetch_all without Copernicus)
+st.button("Oppdater nå", on_click=run_manual_fetch)
 
 
 # ---------------------------------------------------
