@@ -281,7 +281,12 @@ def fetch_observasjoner_lista_live():
     Hent siste ~6 timer vindobservasjoner (Lista fyr) fra Frost direkte.
     Bruker FROST_CLIENT_ID fra env eller st.secrets.
     """
-    client_id = os.getenv("FROST_CLIENT_ID") or st.secrets.get("FROST_CLIENT_ID", None)
+    client_id = os.getenv("FROST_CLIENT_ID")
+    if not client_id:
+        try:
+            client_id = st.secrets["FROST_CLIENT_ID"]
+        except Exception:
+            client_id = None
     if not client_id:
         return None
 
