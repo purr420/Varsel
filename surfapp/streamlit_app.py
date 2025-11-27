@@ -782,6 +782,11 @@ if st.button("Oppdater nå"):
     if run_manual_fetch():
         st.rerun()
 
+# Quick debug info for data freshness
+yr_latest = max(YR_DATA.keys()) if YR_DATA else None
+yr_latest_str = yr_latest.strftime("%Y-%m-%d %H:%M UTC") if yr_latest else "ingen"
+st.caption(f"YR cache: {len(YR_DATA)} rader, siste: {yr_latest_str}. Sist fetch: {LAST_FETCH_UTC.strftime('%Y-%m-%d %H:%M UTC') if LAST_FETCH_UTC else 'ukjent'}")
+
 
 # ---------------------------------------------------
 #  HEADER
