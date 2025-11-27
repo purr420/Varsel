@@ -102,12 +102,13 @@ def run_manual_fetch():
         now = datetime.now(UTC)
         write_last_fetch_time(now)
         st.success(f"Data oppdatert {now.astimezone(OSLO_TZ).strftime('%H:%M')}")
-        st.rerun()
+        return True
     except subprocess.CalledProcessError as exc:
         err = exc.stderr.strip() or exc.stdout.strip() or str(exc)
         st.warning(f"Kunne ikke oppdatere data: {err}")
     except Exception as exc:
         st.warning(f"Kunne ikke oppdatere data: {exc}")
+    return False
 
 
 def load_cloud_freeze():
@@ -777,7 +778,9 @@ tomorrow_date = today_date + timedelta(days=1)
 usable_first_tomorrow, usable_last_tomorrow = get_light_oslo_for_date(tomorrow_date)
 
 # Manual refresh button (fetch_all without Copernicus)
-st.button("Oppdater nå", on_click=run_manual_fetch)
+if st.button("Oppdater nå"):
+    if run_manual_fetch():
+        st.rerun()
 
 
 # ---------------------------------------------------
