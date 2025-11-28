@@ -973,9 +973,9 @@ for idx, d in enumerate(days):
             month_name = MONTHS_NO[d.month - 1]
             label = f"I morgen {d.day}. {month_name}"
         else:
-            WEEKDAY_NO = ["Man", "Tir", "Ons",
-                          "Tor", "Fre", "Lør", "Søn"]
-            weekday = WEEKDAY_NO[d.weekday()]
+            WEEKDAY_FULL = ["Mandag", "Tirsdag", "Onsdag",
+                            "Torsdag", "Fredag", "Lørdag", "Søndag"]
+            weekday = WEEKDAY_FULL[d.weekday()]
             month_name = MONTHS_NO[d.month - 1]
             label = f"{weekday} {d.day}. {month_name}"
 
@@ -1187,9 +1187,11 @@ for block in day_blocks:
     hours = block["hours"]
 
     if label:
+        WEEKDAY_ABBR = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"]
+        day_prefix = WEEKDAY_ABBR[d.weekday()]
         html += f"""
         <tr class="day-separator">
-            <td></td>
+            <td>{day_prefix}</td>
             <td colspan="{DATA_COLUMNS}">{label}</td>
         </tr>
         """
