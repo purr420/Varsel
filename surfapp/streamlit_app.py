@@ -421,6 +421,13 @@ CELL_COLORS = {
     ],
     "gust_high": "#ffb3b3",
 }
+COMBINED_WIND_COLORS = {
+    "excellent": CELL_COLORS["gust"][0][1],  # green
+    "good":      CELL_COLORS["gust"][1][1],  # yellow
+    "ok":        CELL_COLORS["gust"][2][1],  # orange
+    "bad":       CELL_COLORS["gust_high"],   # red
+    "off":       "#e0e0e0",                  # light grey for unknown
+}
 
 
 def style_wave_height(raw) -> str:
@@ -484,6 +491,51 @@ def classify_direction(deg: float) -> str:
     return "good"
 
 
+def classify_wind_combined(speed_ms, deg):
+    """
+    Returns: 'excellent', 'good', 'ok', 'bad', 'off'
+    """
+
+    # Missing data → 'off'
+    if speed_ms is None or deg is None:
+        return "off"
+
+    try:
+        s = round(float(speed_ms))
+    except (TypeError, ValueError):
+        return "off"
+
+    dcat = classify_direction(deg)  # your existing logic
+
+    # < 6 m/s (always excellent)
+    if s < 6:
+        return "excellent"
+
+    # 6–9 m/s
+    if 6 <= s <= 9:
+        if dcat == "very_good":
+            return "excellent"
+        if dcat == "good":
+            return "good"
+        return "ok"
+
+    # 10–17 m/s
+    if 9 < s <= 17:
+        if dcat == "very_good":
+            return "good"
+        if dcat == "good":
+            return "ok"
+        return "bad"
+
+    # > 17 m/s
+    if s > 17:
+        if dcat == "very_good":
+            return "ok"
+        return "bad"
+
+    return "off"
+
+
 def style_wind_combined(row) -> str:
     gust = to_float(get_val(row, "gust_speed_ms"))
     speed = to_float(get_val(row, "wind_speed_ms"))
@@ -517,6 +569,10 @@ def style_wind_combined(row) -> str:
             color = CELL_COLORS["gust_high"]   # red
 
     return f"background-color:{color};"
+
+
+def style_wind_combined_cat(cat: str) -> str:
+    return f"background-color:{COMBINED_WIND_COLORS.get(cat, '#e0e0e0')};"
 
 
 
@@ -1222,7 +1278,15 @@ for block in day_blocks:
             wind_mix_row = obs_row if obs_row else yr_row
         else:
             wind_mix_row = yr_row if yr_row else obs_row
-        wind_mix_style = style_wind_combined(wind_mix_row) if wind_mix_row else ""
+        if wind_mix_row:
+            gust = to_float(get_val(wind_mix_row, "gust_speed_ms"))
+            speed = to_float(get_val(wind_mix_row, "wind_speed_ms"))
+            spd = gust if gust is not None else speed  # use gust if available
+            deg = to_float(get_val(wind_mix_row, "wind_dir_deg"))
+            wind_cat = classify_wind_combined(spd, deg)
+            wind_mix_style = style_wind_combined_cat(wind_cat)
+        else:
+            wind_mix_style = style_wind_combined_cat("off")
 
         cells = [
             {
