@@ -449,15 +449,21 @@ def style_gust(raw) -> str:
     val = to_float(raw)
     if val is None:
         return ""
-    if val < 5.5:
+
+    # Bruk samme avrunding som vises i tabellen (fmt_integer)
+    shown = round(val)  # dette matcher fmt_integer()
+
+    if shown < 6:
         color = CELL_COLORS["gust"][0][1]
-    elif val < 8.5:
+    elif shown < 9:
         color = CELL_COLORS["gust"][1][1]
-    elif val < 16.5:
+    elif shown < 17:
         color = CELL_COLORS["gust"][2][1]
     else:
         color = CELL_COLORS["gust_high"]
+
     return f"background-color:{color};"
+
 
 
 MODEL_METADATA = {
