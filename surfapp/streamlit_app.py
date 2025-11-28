@@ -973,8 +973,8 @@ for idx, d in enumerate(days):
             month_name = MONTHS_NO[d.month - 1]
             label = f"I morgen {d.day}. {month_name}"
         else:
-            WEEKDAY_NO = ["Mandag", "Tirsdag", "Onsdag",
-                          "Torsdag", "Fredag", "Lørdag", "Søndag"]
+            WEEKDAY_NO = ["Man", "Tir", "Ons",
+                          "Tor", "Fre", "Lør", "Søn"]
             weekday = WEEKDAY_NO[d.weekday()]
             month_name = MONTHS_NO[d.month - 1]
             label = f"{weekday} {d.day}. {month_name}"
@@ -1086,12 +1086,14 @@ html = f"""
 .day-separator td:first-child {{
     background: #ececec !important;
 }}
+.day-separator td {{
+    font-size: 14px;
+}}
 .day-separator td[colspan] {{
     background: #f7f7f7 !important;
     text-align: left;
     padding-left: 12px;
     font-weight: normal;
-    font-size: 15px;
 }}
 
 /* Fix rowspan header alignment on desktop */
