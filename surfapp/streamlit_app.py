@@ -23,6 +23,9 @@ today_date = now_oslo.date()
 
 # Ensure Copernicus credential file exists on Streamlit Cloud
 st.set_page_config(layout="wide")
+st.write("Persistent mount exists:", os.path.exists("/mount/data"))
+if os.path.exists("/mount/data"):
+    st.write("Files in /mount/data:", os.listdir("/mount/data"))
 
 # ---- Load daylight data ----
 DAYLIGHT = load_daylight_table()
@@ -725,6 +728,9 @@ usable_first_tomorrow, usable_last_tomorrow = get_light_oslo_for_date(tomorrow_d
 #  HEADER
 # ---------------------------------------------------
 
+if "show_copernicus_upload" not in st.session_state:
+    st.session_state["show_copernicus_upload"] = False
+
 MONTHS_NO = ["jan", "feb", "mar", "apr", "mai", "jun",
              "jul", "aug", "sep", "okt", "nov", "des"]
 MONTHS_EN = [
@@ -753,8 +759,10 @@ else:
         f"(oppdatert {now_oslo.strftime('%H:%M %d.')} {month_no})"
     )
 
-st.markdown(
-    f"""
+header_cols = st.columns([0.92, 0.08])
+with header_cols[0]:
+    st.markdown(
+        f"""
 <style>
 .header-title {{
     font-size: 42px;
@@ -805,8 +813,21 @@ Sjø: <b>{fmt_decimal(LINDESNES_LATEST[0]) if LINDESNES_LATEST else "--"} °C</b
 
 <hr>
 """,
-    unsafe_allow_html=True
-)
+        unsafe_allow_html=True
+    )
+
+with header_cols[1]:
+    if st.button("📤", key="copernicus_upload_btn", help="Last opp Copernicus CSV", use_container_width=True):
+        st.session_state["show_copernicus_upload"] = not st.session_state["show_copernicus_upload"]
+
+    if st.session_state.get("show_copernicus_upload"):
+        uploaded_file = st.file_uploader("Last opp Copernicus CSV", type=["csv"], key="copernicus_csv")
+        if uploaded_file is not None:
+            os.makedirs("/mount/data/public", exist_ok=True)
+            with open("/mount/data/public/copernicus_lista_readable.csv", "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            st.success("Copernicus-CSV oppdatert.")
+            st.rerun()
 
 
 # ---------------------------------------------------
