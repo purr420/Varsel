@@ -465,6 +465,58 @@ def style_gust(raw) -> str:
     return f"background-color:{color};"
 
 
+def classify_direction(deg: float) -> str:
+    """
+    Klassifiserer vindretning (grader) i 'very_good', 'good' eller 'bad'
+    basert på definerte kompassintervaller.
+    """
+    if deg is None:
+        return "bad"
+    try:
+        d = float(deg) % 360
+    except (TypeError, ValueError):
+        return "bad"
+
+    if d >= 337.5 or d <= 90:
+        return "very_good"
+    if 135 <= d <= 270:
+        return "bad"
+    return "good"
+
+
+def style_wind_combined(row) -> str:
+    gust = to_float(get_val(row, "gust_speed_ms"))
+    speed = to_float(get_val(row, "wind_speed_ms"))
+    val = gust if gust is not None else speed
+    if val is None:
+        return ""
+
+    direction = classify_direction(get_val(row, "wind_dir_deg"))
+    shown = round(val)
+
+    if shown < 6:
+        color = CELL_COLORS["gust"][0][1]  # green
+    elif 6 <= shown <= 9:
+        if direction == "bad":
+            color = CELL_COLORS["gust"][2][1]  # orange-ish
+        else:
+            color = CELL_COLORS["gust"][0][1]  # green
+    elif 9 < shown <= 17:
+        if direction == "very_good":
+            color = CELL_COLORS["gust"][0][1]  # green
+        elif direction == "good":
+            color = CELL_COLORS["gust"][1][1]  # yellow
+        else:
+            color = CELL_COLORS["gust_high"]   # red
+    else:  # > 17
+        if direction == "very_good":
+            color = CELL_COLORS["gust"][2][1]  # orange-ish
+        else:
+            color = CELL_COLORS["gust_high"]   # red
+
+    return f"background-color:{color};"
+
+
 
 MODEL_METADATA = {
     "dmi_hav": read_metadata_from_cache("dmi_hav_lista_cache.csv") or {},
@@ -1161,6 +1213,7 @@ for block in day_blocks:
             wind_mix_row = obs_row if obs_row else yr_row
         else:
             wind_mix_row = yr_row if yr_row else obs_row
+        wind_mix_style = style_wind_combined(wind_mix_row) if wind_mix_row else ""
 
         cells = [
             {
@@ -1174,9 +1227,9 @@ for block in day_blocks:
             {"value": deg_to_arrow(get_val(dmi_hav_row, "swell_dir_deg")), "style": ""},
             {
                 "value": fmt_wind(get_val(wind_mix_row, "wind_speed_ms"), get_val(wind_mix_row, "gust_speed_ms")),
-                "style": "",
+                "style": wind_mix_style,
             },
-            {"value": deg_to_arrow(get_val(wind_mix_row, "wind_dir_deg")), "style": ""},
+            {"value": deg_to_arrow(get_val(wind_mix_row, "wind_dir_deg")), "style": wind_mix_style},
             {
                 "value": fmt_decimal(get_val(dmi_hav_row, "swell_hs_m")),
                 "style": style_wave_height(get_val(dmi_hav_row, "swell_hs_m")),
