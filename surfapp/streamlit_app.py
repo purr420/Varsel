@@ -27,8 +27,8 @@ st.set_page_config(layout="wide")
 # ---- Load daylight data ----
 DAYLIGHT = load_daylight_table()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_CACHE_DIR = os.path.join(BASE_DIR, "data_cache")
-DATA_PUBLIC_DIR = os.path.join(BASE_DIR, "data_public")
+DATA_CACHE_DIR = "/mount/data/cache"
+DATA_PUBLIC_DIR = "/mount/data/public"
 YR_CACHE_PATH = os.path.join(DATA_CACHE_DIR, "yr_lista_cache.csv")
 FETCH_SCRIPT = os.path.join(BASE_DIR, "fetch_all.py")
 FETCH_TIMESTAMP_PATH = os.path.join(DATA_CACHE_DIR, "fetch_all_last_run.txt")
