@@ -934,17 +934,19 @@ for idx, d in enumerate(days):
 # ---------------------------------------------------
 
 ALIGN = {
-    1: "right", 2: "center", 3: "left",
-    4: "center",
-    5: "right", 6: "center", 7: "left",
-    8: "right", 9: "center", 10: "left",
-    11: "right", 12: "center", 13: "left",
-    14: "right", 15: "center", 16: "left",
-    17: "right", 18: "left",
-    19: "right", 20: "left",
-    21: "right", 22: "left",
-    23: "center", 24: "center",
-    25: "center", 26: "center",
+    1: "right", 2: "center", 3: "left",   # Dønning (new)
+    4: "right", 5: "left",                # Vind (new)
+    6: "right", 7: "center", 8: "left",   # Dønning (DMI)
+    9: "center",                          # P.dom.
+    10: "right", 11: "center", 12: "left",# Vindbølger (DMI)
+    13: "right", 14: "center", 15: "left",# Vindbølger (CMEMS)
+    16: "right", 17: "center", 18: "left",# Swell (CMEMS)
+    19: "right", 20: "center", 21: "left",# 2nd Swell (CMEMS)
+    22: "right", 23: "left",              # Vind (Yr)
+    24: "right", 25: "left",              # Vind (DMI)
+    26: "right", 27: "left",              # Vind (målt)
+    28: "right", 29: "center",            # Temp (°C)
+    30: "center", 31: "center",           # Sky/Nedbør
 }
 DATA_COLUMNS = len(ALIGN)
 
@@ -1070,6 +1072,8 @@ html = f"""
 <thead>
 <tr class="header-top">
     <th rowspan="2">Tid</th>
+    <th colspan="3">Dønning</th>
+    <th colspan="2">Vind</th>
     <th colspan="3">Dønning (DMI)</th>
     <th>P.dom.</th>
     <th colspan="3">Vindbølger (DMI)</th>
@@ -1088,29 +1092,34 @@ html = f"""
     <th style="text-align:{col_align(1)}">(m)</th>
     <th style="text-align:{col_align(2)}">(s)</th>
     <th style="text-align:{col_align(3)}"></th>
-    <th style="text-align:{col_align(4)}">(s)</th>
-    <th style="text-align:{col_align(5)}">(m)</th>
-    <th style="text-align:{col_align(6)}">(s)</th>
-    <th style="text-align:{col_align(7)}"></th>
-    <th style="text-align:{col_align(8)}">(m)</th>
+    <th style="text-align:{col_align(4)}">(m/s)</th>
+    <th style="text-align:{col_align(5)}"></th>
+    <th style="text-align:{col_align(6)}">(m)</th>
+    <th style="text-align:{col_align(7)}">(s)</th>
+    <th style="text-align:{col_align(8)}"></th>
     <th style="text-align:{col_align(9)}">(s)</th>
-    <th style="text-align:{col_align(10)}"></th>
-    <th style="text-align:{col_align(11)}">(m)</th>
-    <th style="text-align:{col_align(12)}">(s)</th>
-    <th style="text-align:{col_align(13)}"></th>
-    <th style="text-align:{col_align(14)}">(m)</th>
-    <th style="text-align:{col_align(15)}">(s)</th>
-    <th style="text-align:{col_align(16)}"></th>
-    <th style="text-align:{col_align(17)}">(m/s)</th>
+    <th style="text-align:{col_align(10)}">(m)</th>
+    <th style="text-align:{col_align(11)}">(s)</th>
+    <th style="text-align:{col_align(12)}"></th>
+    <th style="text-align:{col_align(13)}">(m)</th>
+    <th style="text-align:{col_align(14)}">(s)</th>
+    <th style="text-align:{col_align(15)}"></th>
+    <th style="text-align:{col_align(16)}">(m)</th>
+    <th style="text-align:{col_align(17)}">(s)</th>
     <th style="text-align:{col_align(18)}"></th>
-    <th style="text-align:{col_align(19)}">(m/s)</th>
-    <th style="text-align:{col_align(20)}"></th>
-    <th style="text-align:{col_align(21)}">(m/s)</th>
-    <th style="text-align:{col_align(22)}"></th>
-    <th style="text-align:{col_align(23)}">Luft</th>
-    <th style="text-align:{col_align(24)}">Sjø</th>
-    <th style="text-align:{col_align(25)}">(%)</th>
-    <th style="text-align:{col_align(26)}">(mm)</th>
+    <th style="text-align:{col_align(19)}">(m)</th>
+    <th style="text-align:{col_align(20)}">(s)</th>
+    <th style="text-align:{col_align(21)}"></th>
+    <th style="text-align:{col_align(22)}">(m/s)</th>
+    <th style="text-align:{col_align(23)}"></th>
+    <th style="text-align:{col_align(24)}">(m/s)</th>
+    <th style="text-align:{col_align(25)}"></th>
+    <th style="text-align:{col_align(26)}">(m/s)</th>
+    <th style="text-align:{col_align(27)}"></th>
+    <th style="text-align:{col_align(28)}">Luft</th>
+    <th style="text-align:{col_align(29)}">Sjø</th>
+    <th style="text-align:{col_align(30)}">(%)</th>
+    <th style="text-align:{col_align(31)}">(mm)</th>
 </tr>
 </thead>
 
@@ -1147,7 +1156,27 @@ for block in day_blocks:
         cop_row = COP_DATA.get(dt_key_utc)
         obs_row = OBS_LISTA_DATA.get(dt_key_utc)
 
+        # Wind (measured in past, Yr in future)
+        if dt_key_utc <= now_utc:
+            wind_mix_row = obs_row if obs_row else yr_row
+        else:
+            wind_mix_row = yr_row if yr_row else obs_row
+
         cells = [
+            {
+                "value": fmt_decimal(get_val(dmi_hav_row, "swell_hs_m")),
+                "style": style_wave_height(get_val(dmi_hav_row, "swell_hs_m")),
+            },
+            {
+                "value": fmt_integer(get_val(dmi_hav_row, "swell_tp_s")),
+                "style": style_period(get_val(dmi_hav_row, "swell_tp_s")),
+            },
+            {"value": deg_to_arrow(get_val(dmi_hav_row, "swell_dir_deg")), "style": ""},
+            {
+                "value": fmt_wind(get_val(wind_mix_row, "wind_speed_ms"), get_val(wind_mix_row, "gust_speed_ms")),
+                "style": "",
+            },
+            {"value": deg_to_arrow(get_val(wind_mix_row, "wind_dir_deg")), "style": ""},
             {
                 "value": fmt_decimal(get_val(dmi_hav_row, "swell_hs_m")),
                 "style": style_wave_height(get_val(dmi_hav_row, "swell_hs_m")),
