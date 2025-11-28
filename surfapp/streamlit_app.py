@@ -783,15 +783,7 @@ tomorrow_date = today_date + timedelta(days=1)
 usable_first_tomorrow, usable_last_tomorrow = get_light_oslo_for_date(tomorrow_date)
 
 # Manual refresh button (fetch_all without Copernicus)
-if st.button("Oppdater nå"):
-    if run_manual_fetch():
-        st.rerun()
-
-# Quick debug info for data freshness
-yr_latest = max(YR_DATA.keys()) if YR_DATA else None
-yr_latest_str = yr_latest.strftime("%Y-%m-%d %H:%M UTC") if yr_latest else "ingen"
-st.caption(f"YR cache: {len(YR_DATA)} rader, siste: {yr_latest_str}. Sist fetch: {LAST_FETCH_UTC.strftime('%Y-%m-%d %H:%M UTC') if LAST_FETCH_UTC else 'ukjent'}")
-
+# (Manual refresh button removed)
 
 # ---------------------------------------------------
 #  HEADER
