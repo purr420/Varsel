@@ -980,7 +980,7 @@ for idx, d in enumerate(days):
             label = f"{weekday} {d.day}. {month_name}"
 
 
-    day_blocks.append({"label": label, "hours": hours})
+    day_blocks.append({"label": label, "hours": hours, "date": d})
 
 
 # ---------------------------------------------------
@@ -1185,10 +1185,13 @@ html = f"""
 for block in day_blocks:
     label = block["label"]
     hours = block["hours"]
+    block_date = block.get("date")
+    if block_date is None and hours:
+        block_date = hours[0].date()
 
     if label:
         WEEKDAY_ABBR = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"]
-        day_prefix = WEEKDAY_ABBR[d.weekday()]
+        day_prefix = WEEKDAY_ABBR[block_date.weekday()] if block_date else ""
         html += f"""
         <tr class="day-separator">
             <td>{day_prefix}</td>
