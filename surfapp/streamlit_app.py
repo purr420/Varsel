@@ -23,18 +23,12 @@ today_date = now_oslo.date()
 
 # Ensure Copernicus credential file exists on Streamlit Cloud
 st.set_page_config(layout="wide")
-st.write("Persistent mount exists:", os.path.exists("/mount/data"))
-if os.path.exists("/mount/data"):
-    st.write("Files in /mount/data:", os.listdir("/mount/data"))
 
 # ---- Load daylight data ----
 DAYLIGHT = load_daylight_table()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PERSIST_BASE = os.getenv("PERSIST_BASE_DIR", "/mount/data")
-if not (os.path.isdir(PERSIST_BASE) and os.access(PERSIST_BASE, os.W_OK)):
-    PERSIST_BASE = os.path.join(BASE_DIR, "data_persist_fallback")
-DATA_CACHE_DIR = os.path.join(PERSIST_BASE, "cache")
-DATA_PUBLIC_DIR = os.path.join(PERSIST_BASE, "public")
+DATA_CACHE_DIR = os.path.join(BASE_DIR, "data_cache")
+DATA_PUBLIC_DIR = os.path.join(BASE_DIR, "data_public")
 YR_CACHE_PATH = os.path.join(DATA_CACHE_DIR, "yr_lista_cache.csv")
 FETCH_SCRIPT = os.path.join(BASE_DIR, "fetch_all.py")
 FETCH_TIMESTAMP_PATH = os.path.join(DATA_CACHE_DIR, "fetch_all_last_run.txt")
@@ -728,9 +722,6 @@ usable_first_tomorrow, usable_last_tomorrow = get_light_oslo_for_date(tomorrow_d
 #  HEADER
 # ---------------------------------------------------
 
-if "show_copernicus_upload" not in st.session_state:
-    st.session_state["show_copernicus_upload"] = False
-
 MONTHS_NO = ["jan", "feb", "mar", "apr", "mai", "jun",
              "jul", "aug", "sep", "okt", "nov", "des"]
 MONTHS_EN = [
@@ -759,10 +750,8 @@ else:
         f"(oppdatert {now_oslo.strftime('%H:%M %d.')} {month_no})"
     )
 
-header_cols = st.columns([0.92, 0.08])
-with header_cols[0]:
-    st.markdown(
-        f"""
+st.markdown(
+    f"""
 <style>
 .header-title {{
     font-size: 42px;
@@ -813,21 +802,8 @@ Sjø: <b>{fmt_decimal(LINDESNES_LATEST[0]) if LINDESNES_LATEST else "--"} °C</b
 
 <hr>
 """,
-        unsafe_allow_html=True
-    )
-
-with header_cols[1]:
-    if st.button("📤", key="copernicus_upload_btn", help="Last opp Copernicus CSV", use_container_width=True):
-        st.session_state["show_copernicus_upload"] = not st.session_state["show_copernicus_upload"]
-
-    if st.session_state.get("show_copernicus_upload"):
-        uploaded_file = st.file_uploader("Last opp Copernicus CSV", type=["csv"], key="copernicus_csv")
-        if uploaded_file is not None:
-            os.makedirs("/mount/data/public", exist_ok=True)
-            with open("/mount/data/public/copernicus_lista_readable.csv", "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            st.success("Copernicus-CSV oppdatert.")
-            st.rerun()
+    unsafe_allow_html=True
+)
 
 
 # ---------------------------------------------------
@@ -870,9 +846,16 @@ now_floor = now_oslo.replace(minute=0, second=0, microsecond=0)
 for idx, d in enumerate(days):
     day_start, day_end = compute_day_window(d)
 
-    # Special handling for the first block:
-    # always start at the daylight-based day_start to keep recent past hours
-    start_time = day_start
+    #
+    # Correct start-time logic:
+    #  - If today and first block → start at (now - 2h)
+    #  - Else → use daylight-based day_start
+    #
+    if d == today_date and idx == 0 and not skip_today:
+        two_hours_back = now_oslo - timedelta(hours=2)
+        start_time = two_hours_back.replace(minute=0, second=0, microsecond=0)
+    else:
+        start_time = day_start
 
     # Align end of forecast to last DMI HAV timestamp if present
     if last_dmi_hav_dt_utc:
