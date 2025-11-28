@@ -497,15 +497,17 @@ def style_wind_combined(row) -> str:
     if shown < 6:
         color = CELL_COLORS["gust"][0][1]  # green
     elif 6 <= shown <= 9:
-        if direction == "bad":
-            color = CELL_COLORS["gust"][2][1]  # orange-ish
-        else:
-            color = CELL_COLORS["gust"][0][1]  # green
-    elif 9 < shown <= 17:
         if direction == "very_good":
             color = CELL_COLORS["gust"][0][1]  # green
         elif direction == "good":
             color = CELL_COLORS["gust"][1][1]  # yellow
+        else:
+            color = CELL_COLORS["gust"][2][1]  # orange-ish
+    elif 9 < shown <= 17:
+        if direction == "very_good":
+            color = CELL_COLORS["gust"][1][1]  # yellow
+        elif direction == "good":
+            color = CELL_COLORS["gust"][2][1]  # orange-ish
         else:
             color = CELL_COLORS["gust_high"]   # red
     else:  # > 17
