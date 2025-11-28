@@ -26,8 +26,11 @@ UTC = timezone.utc
 OSLO_TZ = pytz.timezone("Europe/Oslo")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CACHE_DIR = "/mount/data/cache"   # intern cache (beste format)
-PUBLIC_DIR = "/mount/data/public" # lesbare CSV-er
+PERSIST_BASE = os.getenv("PERSIST_BASE_DIR", "/mount/data")
+if not (os.path.isdir(PERSIST_BASE) and os.access(PERSIST_BASE, os.W_OK)):
+    PERSIST_BASE = os.path.join(BASE_DIR, "data_persist_fallback")
+CACHE_DIR = os.path.join(PERSIST_BASE, "cache")   # intern cache (beste format)
+PUBLIC_DIR = os.path.join(PERSIST_BASE, "public") # lesbare CSV-er
 LAST_RUN_FILE = os.path.join(CACHE_DIR, "fetch_all_last_run.txt")
 DMI_API_KEY_EDR = "ae501bfc-112e-400e-89df-77a2a6b9af72"
 DMI_API_KEY_STAC = "a4b09032-bca5-4255-ac85-6fea95a1e02c"

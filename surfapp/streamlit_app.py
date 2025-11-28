@@ -27,8 +27,11 @@ st.set_page_config(layout="wide")
 # ---- Load daylight data ----
 DAYLIGHT = load_daylight_table()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_CACHE_DIR = "/mount/data/cache"
-DATA_PUBLIC_DIR = "/mount/data/public"
+PERSIST_BASE = os.getenv("PERSIST_BASE_DIR", "/mount/data")
+if not (os.path.isdir(PERSIST_BASE) and os.access(PERSIST_BASE, os.W_OK)):
+    PERSIST_BASE = os.path.join(BASE_DIR, "data_persist_fallback")
+DATA_CACHE_DIR = os.path.join(PERSIST_BASE, "cache")
+DATA_PUBLIC_DIR = os.path.join(PERSIST_BASE, "public")
 YR_CACHE_PATH = os.path.join(DATA_CACHE_DIR, "yr_lista_cache.csv")
 FETCH_SCRIPT = os.path.join(BASE_DIR, "fetch_all.py")
 FETCH_TIMESTAMP_PATH = os.path.join(DATA_CACHE_DIR, "fetch_all_last_run.txt")
@@ -618,9 +621,6 @@ def get_light_oslo_for_date(d: date, cloud_override: Optional[float] = None):
         return None, None
 
     row = row.iloc[0]
-    date_store_key = d.isoformat()
-    freeze_entry = CLOUD_FREEZE.setdefault(date_store_key, {})
-    freeze_updated = False
 
     def parse_utc_to_oslo(clock_str: str):
         if not isinstance(clock_str, str) or ":" not in clock_str:
@@ -650,49 +650,27 @@ def get_light_oslo_for_date(d: date, cloud_override: Optional[float] = None):
         morning_cloud, morning_precip = get_weather_for_hour(morning_hour)
         evening_cloud, evening_precip = get_weather_for_hour(evening_hour)
 
-    stored_first = parse_frozen_dt(freeze_entry.get("first"))
-    stored_last = parse_frozen_dt(freeze_entry.get("last"))
-
-    if stored_first:
-        usable_first = stored_first
+    if morning_cloud <= 50:
+        usable_first = first_light_early
     else:
-        if morning_cloud <= 50:
-            usable_first = first_light_early
+        usable_first = midpoint_dt(first_light_early, first_light_late)
+
+    if morning_precip > 0:
+        if morning_precip <= 2:
+            usable_first = first_light_late
         else:
-            usable_first = midpoint_dt(first_light_early, first_light_late)
+            usable_first = midpoint_dt(first_light_late, sunrise_oslo)
 
-        if morning_precip > 0:
-            if morning_precip <= 2:
-                usable_first = first_light_late
-            else:
-                usable_first = midpoint_dt(first_light_late, sunrise_oslo)
-
-        if cloud_override is None:
-            if now_oslo.date() > d or (now_oslo.date() == d and now_oslo >= sunrise_oslo):
-                freeze_entry["first"] = usable_first.astimezone(OSLO_TZ).isoformat()
-                freeze_updated = True
-
-    if stored_last:
-        usable_last = stored_last
+    if evening_cloud <= 50:
+        usable_last = last_light_late
     else:
-        if evening_cloud <= 50:
-            usable_last = last_light_late
+        usable_last = midpoint_dt(last_light_late, last_light_early)
+
+    if evening_precip > 0:
+        if evening_precip <= 2:
+            usable_last = last_light_early
         else:
-            usable_last = midpoint_dt(last_light_late, last_light_early)
-
-        if evening_precip > 0:
-            if evening_precip <= 2:
-                usable_last = last_light_early
-            else:
-                usable_last = midpoint_dt(sunset_oslo, last_light_early)
-
-        if cloud_override is None:
-            if now_oslo.date() > d or (now_oslo.date() == d and now_oslo >= sunset_oslo):
-                freeze_entry["last"] = usable_last.astimezone(OSLO_TZ).isoformat()
-                freeze_updated = True
-
-    if freeze_updated:
-        save_cloud_freeze(CLOUD_FREEZE)
+            usable_last = midpoint_dt(sunset_oslo, last_light_early)
 
     return usable_first, usable_last
 
@@ -872,17 +850,8 @@ for idx, d in enumerate(days):
     day_start, day_end = compute_day_window(d)
 
     # Special handling for the first block:
-    # - If it's really "today" and we did NOT skip today,
-    #   we start at max(day_start, now - 2h)
-    if idx == 0 and (d == today_date) and not skip_today:
-        candidate_start = now_floor - timedelta(hours=2)
-        if candidate_start < day_start:
-            start_time = day_start
-        else:
-            start_time = candidate_start
-    else:
-        # For all other days we always start at the daylight-based day_start
-        start_time = day_start
+    # always start at the daylight-based day_start to keep recent past hours
+    start_time = day_start
 
     # Align end of forecast to last DMI HAV timestamp if present
     if last_dmi_hav_dt_utc:
@@ -1152,10 +1121,13 @@ for block in day_blocks:
 
     for dt in hours:
         hour_str = dt.strftime("%H")
-        dt_key_utc = dt.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+        # Build UTC key deterministically to avoid pytz DST quirks across environments
+        dt_key_utc = datetime(
+            dt.year, dt.month, dt.day, dt.hour, 0, 0, tzinfo=OSLO_TZ
+        ).astimezone(UTC).replace(minute=0, second=0, microsecond=0)
 
-        # Yr: use exact hour (no nearest) to avoid mismatches
-        yr_row = YR_DATA.get(dt_key_utc)
+        # Yr: prefer exact hour; if missing, allow nearest within 1h to avoid blanks
+        yr_row = YR_DATA.get(dt_key_utc) or get_nearest_row(YR_DATA, dt_key_utc, max_hours=1)
 
         # Others are hourly in UTC -> exact match only
         dmi_hav_row = DMI_HAV_DATA.get(dt_key_utc)
