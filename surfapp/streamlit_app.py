@@ -426,7 +426,7 @@ COMBINED_WIND_COLORS = {
     "good":      CELL_COLORS["gust"][1][1],  # yellow
     "ok":        CELL_COLORS["gust"][2][1],  # orange
     "bad":       CELL_COLORS["gust_high"],   # red
-    "off":       "#e0e0e0",                  # light grey for unknown
+    "off":       "#f7f7f7",                  # match table background
 }
 
 
@@ -572,7 +572,7 @@ def style_wind_combined(row) -> str:
 
 
 def style_wind_combined_cat(cat: str) -> str:
-    return f"background-color:{COMBINED_WIND_COLORS.get(cat, '#e0e0e0')};"
+    return f"background-color:{COMBINED_WIND_COLORS.get(cat, '#f7f7f7')};"
 
 
 
