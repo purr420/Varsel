@@ -1028,7 +1028,7 @@ html = f"""
 .sticky-table td {{
     padding: 8px;
     vertical-align: middle;
-    min-width: 60px;
+    min-width: 40px;
     background: #f7f7f7;
     border: none;
 }}
