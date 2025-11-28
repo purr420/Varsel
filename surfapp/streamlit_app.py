@@ -1187,8 +1187,8 @@ for block in day_blocks:
     if label:
         html += f"""
         <tr class="day-separator">
-            <td>{label}</td>
-            <td colspan="{DATA_COLUMNS}"></td>
+            <td></td>
+            <td colspan="{DATA_COLUMNS}">{label}</td>
         </tr>
         """
 
