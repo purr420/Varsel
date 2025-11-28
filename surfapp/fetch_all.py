@@ -26,8 +26,8 @@ UTC = timezone.utc
 OSLO_TZ = pytz.timezone("Europe/Oslo")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CACHE_DIR = os.path.join(BASE_DIR, "data_cache")   # intern cache (beste format)
-PUBLIC_DIR = os.path.join(BASE_DIR, "data_public") # lesbare CSV-er
+CACHE_DIR = "/mount/data/cache"   # intern cache (beste format)
+PUBLIC_DIR = "/mount/data/public" # lesbare CSV-er
 LAST_RUN_FILE = os.path.join(CACHE_DIR, "fetch_all_last_run.txt")
 DMI_API_KEY_EDR = "ae501bfc-112e-400e-89df-77a2a6b9af72"
 DMI_API_KEY_STAC = "a4b09032-bca5-4255-ac85-6fea95a1e02c"
@@ -49,6 +49,10 @@ DISABLE_COPERNICUS_FETCH = os.getenv("DISABLE_COPERNICUS_FETCH") == "1"
 
 def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
+
+# Ensure persistent directories exist
+ensure_dir(CACHE_DIR)
+ensure_dir(PUBLIC_DIR)
 
 
 def write_last_run_timestamp(dt: datetime) -> None:
@@ -1106,6 +1110,7 @@ def main():
         yr_rows,
         ["wind_speed_ms", "wind_dir_deg", "gust_speed_ms", "cloud_cover_pct", "precip_mm"],
         metadata_lines=meta_lines,
+        history_hours=24,
     )
 
     # 2) DMI HAV

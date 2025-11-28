@@ -27,16 +27,18 @@ st.set_page_config(layout="wide")
 # ---- Load daylight data ----
 DAYLIGHT = load_daylight_table()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_CACHE_DIR = os.path.join(BASE_DIR, "data_cache")
-DATA_PUBLIC_DIR = os.path.join(BASE_DIR, "data_public")
+DATA_CACHE_DIR = "/mount/data/cache"
+DATA_PUBLIC_DIR = "/mount/data/public"
 YR_CACHE_PATH = os.path.join(DATA_CACHE_DIR, "yr_lista_cache.csv")
-CLOUD_FREEZE_PATH = os.path.join(DATA_CACHE_DIR, "cloud_freeze.json")
 FETCH_SCRIPT = os.path.join(BASE_DIR, "fetch_all.py")
 FETCH_TIMESTAMP_PATH = os.path.join(DATA_CACHE_DIR, "fetch_all_last_run.txt")
 
 
 def ensure_data_cache_dir():
     os.makedirs(DATA_CACHE_DIR, exist_ok=True)
+    os.makedirs(DATA_PUBLIC_DIR, exist_ok=True)
+
+ensure_data_cache_dir()
 
 
 def read_last_fetch_time() -> Optional[datetime]:
@@ -111,37 +113,6 @@ def run_manual_fetch():
     return False
 
 
-def load_cloud_freeze():
-    if not os.path.exists(CLOUD_FREEZE_PATH):
-        return {}
-    try:
-        with open(CLOUD_FREEZE_PATH, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {}
-
-
-def save_cloud_freeze(data: dict):
-    ensure_data_cache_dir()
-    with open(CLOUD_FREEZE_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-def prune_cloud_freeze(data: dict) -> dict:
-    today = now_oslo.date()
-    pruned = {}
-    for key, value in data.items():
-        try:
-            key_date = date.fromisoformat(key)
-        except ValueError:
-            continue
-        if key_date >= today:
-            pruned[key] = value
-    if pruned != data:
-        save_cloud_freeze(pruned)
-    return pruned
-
-
 def load_yr_cloud_rows():
     """
     Read cloud-cover rows from the cached YR file (UTC -> Oslo).
@@ -181,7 +152,6 @@ def load_yr_cloud_rows():
 
 
 YR_CLOUD_ROWS = load_yr_cloud_rows()
-CLOUD_FREEZE = prune_cloud_freeze(load_cloud_freeze())
 
 
 def read_metadata_from_cache(filename: str) -> Optional[dict]:
@@ -633,18 +603,6 @@ def get_weather_for_hour(dt_oslo: datetime) -> tuple[float, float]:
     cloud = 0.0 if cloud is None else max(0.0, min(100.0, cloud))
     precip = 0.0 if precip is None else max(0.0, precip)
     return cloud, precip
-
-
-def parse_frozen_dt(value: Optional[str]) -> Optional[datetime]:
-    if not isinstance(value, str):
-        return None
-    try:
-        dt = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    if dt.tzinfo is None:
-        return OSLO_TZ.localize(dt)
-    return dt.astimezone(OSLO_TZ)
 
 
 def get_light_oslo_for_date(d: date, cloud_override: Optional[float] = None):
