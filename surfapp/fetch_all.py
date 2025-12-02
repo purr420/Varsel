@@ -567,8 +567,20 @@ def fetch_surfline_lista() -> tuple[list[dict], list[str]]:
     DAYS = 5
     url = f"https://services.surfline.com/kbyg/spots/forecasts/wave?spotId={SPOT_ID}&days={DAYS}"
 
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) "
+            "Gecko/20100101 Firefox/128.0"
+        ),
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Origin": "https://www.surfline.com",
+        "Referer": "https://www.surfline.com/",
+        "Connection": "keep-alive",
+    }
+
     try:
-        resp = requests.get(url, timeout=20)
+        resp = requests.get(url, headers=headers, timeout=20)
         resp.raise_for_status()
         data = resp.json()
     except Exception as exc:
