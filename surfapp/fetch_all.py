@@ -581,9 +581,9 @@ def fetch_surfline_lista() -> tuple[list[dict], list[str]]:
 
     try:
         cookies = {}
-        token = os.getenv("SURFLINE_COOKIE")
-        if token:
-            cookies["SL_SSO"] = token
+        access_token = os.getenv("SURFLINE_ACCESS_TOKEN")
+        if access_token:
+            cookies["access_token"] = access_token
 
         resp = requests.get(url, headers=headers, cookies=cookies, timeout=20)
         resp.raise_for_status()
