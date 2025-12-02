@@ -386,14 +386,40 @@ def fmt_wind(speed, gust):
     return f"{s}({g})"
 
 
+def render_dir_cell(deg_val):
+    if deg_val is None:
+        return "-"
+    try:
+        deg_num = round(float(deg_val))
+    except (TypeError, ValueError):
+        return "-"
+    arrow_html = deg_to_arrow(deg_val)
+    arrow_attr = arrow_html.replace('"', "&quot;")
+    return f'<span class="dir-toggle" data-arrow="{arrow_attr}" data-deg="{deg_num}" data-mode="arrow">{arrow_html}</span>'
+
+
 def format_surfline_dir(main_deg, min_deg):
     if main_deg is None and min_deg is None:
         return "-"
     arrow_main = deg_to_arrow(main_deg) if main_deg is not None else ""
+    try:
+        deg_main = str(round(float(main_deg))) if main_deg is not None else ""
+    except (TypeError, ValueError):
+        deg_main = ""
     if min_deg is None:
-        return arrow_main
+        arrow_attr = arrow_main.replace('"', "&quot;")
+        deg_combo = deg_main or "-"
+        return f'<span class="dir-toggle" data-arrow="{arrow_attr}" data-deg="{deg_combo}" data-mode="arrow">{arrow_main}</span>'
+
     arrow_min = deg_to_arrow(min_deg)
-    return f"{arrow_main}({arrow_min})"
+    try:
+        deg_min = str(round(float(min_deg)))
+    except (TypeError, ValueError):
+        deg_min = ""
+    arrow_combo = f"{arrow_main}({arrow_min})"
+    deg_combo = f"{deg_main or '-'}({deg_min or '-'})"
+    arrow_attr = arrow_combo.replace('"', "&quot;")
+    return f'<span class="dir-toggle" data-arrow="{arrow_attr}" data-deg="{deg_combo}" data-mode="arrow">{arrow_combo}</span>'
 ARROWS = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"]
 
 
@@ -1186,6 +1212,9 @@ html = f"""
     display: inline-block;
     font-size: 16px;
 }}
+.dir-toggle {{
+    cursor: pointer;
+}}
 
 .model-run-wrapper {{
     color: grey !important;
@@ -1354,12 +1383,12 @@ for block in day_blocks:
                 "value": fmt_integer(get_val(dmi_hav_row, "swell_tp_s")),
                 "style": style_period(get_val(dmi_hav_row, "swell_tp_s")),
             },
-            {"value": deg_to_arrow(get_val(dmi_hav_row, "swell_dir_deg")), "style": ""},
+            {"value": render_dir_cell(get_val(dmi_hav_row, "swell_dir_deg")), "style": ""},
             {
                 "value": fmt_wind(get_val(wind_mix_row, "wind_speed_ms"), get_val(wind_mix_row, "gust_speed_ms")),
                 "style": wind_mix_style,
             },
-            {"value": deg_to_arrow(get_val(wind_mix_row, "wind_dir_deg")), "style": wind_mix_style},
+            {"value": render_dir_cell(get_val(wind_mix_row, "wind_dir_deg")), "style": wind_mix_style},
             {
                 "value": fmt_decimal(get_val(primary, "h")) if primary else "-",
                 "style": style_wave_height(get_val(primary, "h")) if primary else "",
@@ -1404,7 +1433,7 @@ for block in day_blocks:
                 "value": fmt_decimal(get_val(dmi_hav_row, "swell_tp_s")),
                 "style": style_period(get_val(dmi_hav_row, "swell_tp_s")),
             },
-            {"value": deg_to_arrow(get_val(dmi_hav_row, "swell_dir_deg")), "style": ""},
+            {"value": render_dir_cell(get_val(dmi_hav_row, "swell_dir_deg")), "style": ""},
             {
                 "value": fmt_decimal(get_val(dmi_hav_row, "tp_s")),
                 "style": style_period(get_val(dmi_hav_row, "tp_s")),
@@ -1417,7 +1446,7 @@ for block in day_blocks:
                 "value": fmt_decimal(get_val(dmi_hav_row, "windwave_tp_s")),
                 "style": style_period(get_val(dmi_hav_row, "windwave_tp_s")),
             },
-            {"value": deg_to_arrow(get_val(dmi_hav_row, "windwave_dir_deg")), "style": ""},
+            {"value": render_dir_cell(get_val(dmi_hav_row, "windwave_dir_deg")), "style": ""},
             {
                 "value": fmt_decimal(get_val(cop_row, "WW_Hs (m)")),
                 "style": style_wave_height(get_val(cop_row, "WW_Hs (m)")),
@@ -1426,7 +1455,7 @@ for block in day_blocks:
                 "value": fmt_decimal(get_val(cop_row, "WW_Tm01 (s)")),
                 "style": style_period(get_val(cop_row, "WW_Tm01 (s)")),
             },
-            {"value": deg_to_arrow(get_val(cop_row, "WW_Dir (°)")), "style": ""},
+            {"value": render_dir_cell(get_val(cop_row, "WW_Dir (°)")), "style": ""},
             {
                 "value": fmt_decimal(get_val(cop_row, "S1_Hs (m)")),
                 "style": style_wave_height(get_val(cop_row, "S1_Hs (m)")),
@@ -1435,7 +1464,7 @@ for block in day_blocks:
                 "value": fmt_decimal(get_val(cop_row, "S1_Tm01 (s)")),
                 "style": style_period(get_val(cop_row, "S1_Tm01 (s)")),
             },
-            {"value": deg_to_arrow(get_val(cop_row, "S1_Dir (°)")), "style": ""},
+            {"value": render_dir_cell(get_val(cop_row, "S1_Dir (°)")), "style": ""},
             {
                 "value": fmt_decimal(get_val(cop_row, "S2_Hs (m)")),
                 "style": style_wave_height(get_val(cop_row, "S2_Hs (m)")),
@@ -1444,22 +1473,22 @@ for block in day_blocks:
                 "value": fmt_decimal(get_val(cop_row, "S2_Tm01 (s)")),
                 "style": style_period(get_val(cop_row, "S2_Tm01 (s)")),
             },
-            {"value": deg_to_arrow(get_val(cop_row, "S2_Dir (°)")), "style": ""},
+            {"value": render_dir_cell(get_val(cop_row, "S2_Dir (°)")), "style": ""},
             {
                 "value": fmt_wind(get_val(yr_row, "wind_speed_ms"), get_val(yr_row, "gust_speed_ms")),
                 "style": style_gust(get_val(yr_row, "gust_speed_ms")),
             },
-            {"value": deg_to_arrow(get_val(yr_row, "wind_dir_deg")), "style": ""},
+            {"value": render_dir_cell(get_val(yr_row, "wind_dir_deg")), "style": ""},
             {
                 "value": fmt_wind(get_val(wind_row, "wind_speed_ms"), get_val(wind_row, "gust_speed_ms")),
                 "style": style_gust(get_val(wind_row, "gust_speed_ms")),
             },
-            {"value": deg_to_arrow(get_val(wind_row, "wind_dir_deg")), "style": ""},
+            {"value": render_dir_cell(get_val(wind_row, "wind_dir_deg")), "style": ""},
             {
                 "value": fmt_wind(get_val(obs_row, "wind_speed_ms"), get_val(obs_row, "gust_speed_ms")),
                 "style": style_gust(get_val(obs_row, "gust_speed_ms")),
             },
-            {"value": deg_to_arrow(get_val(obs_row, "wind_dir_deg")), "style": ""},
+            {"value": render_dir_cell(get_val(obs_row, "wind_dir_deg")), "style": ""},
             {"value": fmt_integer(get_val(dmi_land_row, "temp_air_c")), "style": ""},
             {"value": fmt_integer(get_val(met_row, "sea_temp_c")), "style": ""},
             {"value": fmt_integer(get_val(yr_row, "cloud_cover_pct")), "style": ""},
@@ -1500,5 +1529,24 @@ if footer_lines:
     for line in footer_lines:
         html += f"<div>{line}</div>"
     html += "</div>"
+
+html += """
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.dir-toggle').forEach(function(el) {
+    el.addEventListener('click', function() {
+      const mode = el.getAttribute('data-mode');
+      if (mode === 'deg') {
+        el.innerHTML = el.getAttribute('data-arrow');
+        el.setAttribute('data-mode', 'arrow');
+      } else {
+        el.textContent = el.getAttribute('data-deg');
+        el.setAttribute('data-mode', 'deg');
+      }
+    });
+  });
+});
+</script>
+"""
 
 st.components.v1.html(html, height=780 + 24 * len(footer_lines))
