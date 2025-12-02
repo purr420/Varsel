@@ -580,7 +580,12 @@ def fetch_surfline_lista() -> tuple[list[dict], list[str]]:
     }
 
     try:
-        resp = requests.get(url, headers=headers, timeout=20)
+        cookies = {}
+        token = os.getenv("SURFLINE_COOKIE")
+        if token:
+            cookies["SL_SSO"] = token
+
+        resp = requests.get(url, headers=headers, cookies=cookies, timeout=20)
         resp.raise_for_status()
         data = resp.json()
     except Exception as exc:
