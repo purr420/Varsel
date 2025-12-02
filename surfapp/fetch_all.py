@@ -5,7 +5,7 @@ import json
 import base64
 import binascii
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, Callable
 from email.utils import parsedate_to_datetime
 
 import pandas as pd
@@ -403,6 +403,7 @@ def write_cache_and_readable_csv(
     replace_existing: bool = False,
     convert_dir_to_compass: bool = True,
     dir_round_func=None,
+    value_formatter=None,
 ) -> None:
     """
     Lagrer:
@@ -482,6 +483,9 @@ def write_cache_and_readable_csv(
             }
             for key in value_keys:
                 value = entry["data"].get(key)
+                if value_formatter:
+                    row_out[key] = value_formatter(key, value)
+                    continue
                 if key.endswith("_dir_deg") and convert_dir_to_compass:
                     row_out[key] = deg_to_compass(value)
                 elif key.endswith("_dir_deg") and dir_round_func:
@@ -586,9 +590,9 @@ def fetch_surfline_lista() -> tuple[list[dict], list[str]]:
         except Exception:
             return None
 
-    def round_deg(x):
+    def three_decimal(x):
         try:
-            return round(float(x))
+            return round(float(x), 3)
         except Exception:
             return None
 
@@ -599,28 +603,18 @@ def fetch_surfline_lista() -> tuple[list[dict], list[str]]:
             continue
         dt_utc = datetime.fromtimestamp(ts, tz=UTC)
 
-        sw = hour.get("swells", []) or []
-        s = sw[:3] + [{}] * max(0, 3 - len(sw))
+        swells = hour.get("swells", []) or []
+        swells = swells[:6] + [{}] * max(0, 6 - len(swells))
 
-        row = {
-            "time_utc": dt_utc,
-            "s0_height_m": one_decimal(s[0].get("height")),
-            "s0_period_s": one_decimal(s[0].get("period")),
-            "s0_dir_deg": round_deg(s[0].get("direction")),
-            "s0_dirMin_deg": round_deg(s[0].get("directionMin")),
-            "s1_height_m": one_decimal(s[1].get("height")),
-            "s1_period_s": one_decimal(s[1].get("period")),
-            "s1_dir_deg": round_deg(s[1].get("direction")),
-            "s1_dirMin_deg": round_deg(s[1].get("directionMin")),
-            "s2_height_m": one_decimal(s[2].get("height")),
-            "s2_period_s": one_decimal(s[2].get("period")),
-            "s2_dir_deg": round_deg(s[2].get("direction")),
-            "s2_dirMin_deg": round_deg(s[2].get("directionMin")),
-            "probability": one_decimal(hour.get("probability")),
-            "impact0": one_decimal(s[0].get("impact")),
-            "impact1": one_decimal(s[1].get("impact")),
-            "impact2": one_decimal(s[2].get("impact")),
-        }
+        row = {"time_utc": dt_utc}
+        for i in range(6):
+            sw = swells[i]
+            row[f"s{i+1}_h"] = one_decimal(sw.get("height"))
+            row[f"s{i+1}_p"] = one_decimal(sw.get("period"))
+            row[f"s{i+1}_dir"] = one_decimal(sw.get("direction"))
+            row[f"s{i+1}_dirMin"] = one_decimal(sw.get("directionMin"))
+            row[f"s{i+1}_impact"] = three_decimal(sw.get("impact"))
+
         rows.append(row)
 
     return rows, meta_lines
@@ -1195,27 +1189,42 @@ def main():
             "surfline_lista",
             surf_rows,
             [
-                "s0_height_m",
-                "s0_period_s",
-                "s0_dir_deg",
-                "s0_dirMin_deg",
-                "s1_height_m",
-                "s1_period_s",
-                "s1_dir_deg",
-                "s1_dirMin_deg",
-                "s2_height_m",
-                "s2_period_s",
-                "s2_dir_deg",
-                "s2_dirMin_deg",
-                "probability",
-                "impact0",
-                "impact1",
-                "impact2",
+                "s1_h",
+                "s1_p",
+                "s1_dir",
+                "s1_dirMin",
+                "s2_h",
+                "s2_p",
+                "s2_dir",
+                "s2_dirMin",
+                "s3_h",
+                "s3_p",
+                "s3_dir",
+                "s3_dirMin",
+                "s4_h",
+                "s4_p",
+                "s4_dir",
+                "s4_dirMin",
+                "s5_h",
+                "s5_p",
+                "s5_dir",
+                "s5_dirMin",
+                "s6_h",
+                "s6_p",
+                "s6_dir",
+                "s6_dirMin",
+                "s1_impact",
+                "s2_impact",
+                "s3_impact",
+                "s4_impact",
+                "s5_impact",
+                "s6_impact",
             ],
             metadata_lines=surf_meta,
             history_hours=120,
             convert_dir_to_compass=False,
-            dir_round_func=lambda v: round(v) if isinstance(v, (int, float)) else None,
+            dir_round_func=lambda v: round(v, 1) if isinstance(v, (int, float)) else None,
+            value_formatter=lambda k, v: v,
         )
 
     # 2) DMI HAV

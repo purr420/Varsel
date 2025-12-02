@@ -591,6 +591,7 @@ MODEL_METADATA = {
     "dmi_land": read_metadata_from_cache("dmi_land_lista_cache.csv") or {},
     "yr": read_metadata_from_cache("yr_lista_cache.csv") or {},
     "copernicus": read_metadata_from_cache("copernicus_lista_cache.csv") or {},
+    "surfline": read_metadata_from_cache("surfline_lista_cache.csv") or {},
     "observasjoner_lista": read_metadata_from_cache("observasjoner_lista_cache.csv") or {},
 }
 
@@ -631,6 +632,13 @@ def format_copernicus_metadata(meta: dict) -> Optional[str]:
     if not run_display:
         return None
     return f"Copernicus (CMEMS): Run (UTC) {run_display}"
+
+
+def format_surfline_metadata(meta: dict) -> Optional[str]:
+    run_display = format_run_display(meta.get("model_run"))
+    if not run_display:
+        return None
+    return f"Surfline: Run (UTC) {run_display}"
 
 
 YR_DATA = load_cache_by_hour("yr_lista_cache.csv")
@@ -1315,6 +1323,28 @@ for block in day_blocks:
         else:
             wind_mix_style = style_wind_combined_cat("off")
 
+        # Build Surfline swells and pick top 3 by impact
+        surf_swells = []
+        if surf_row:
+            for i in range(6):
+                surf_swells.append(
+                    {
+                        "h": get_val(surf_row, f"s{i+1}_h"),
+                        "p": get_val(surf_row, f"s{i+1}_p"),
+                        "dir": get_val(surf_row, f"s{i+1}_dir"),
+                        "dirMin": get_val(surf_row, f"s{i+1}_dirMin"),
+                        "impact": get_val(surf_row, f"s{i+1}_impact"),
+                    }
+                )
+        surf_sorted = sorted(
+            surf_swells,
+            key=lambda x: (x["impact"] is not None, x["impact"] if x["impact"] is not None else -1),
+            reverse=True,
+        ) if surf_swells else []
+        primary = surf_sorted[0] if len(surf_sorted) > 0 else None
+        secondary = surf_sorted[1] if len(surf_sorted) > 1 else None
+        tertiary = surf_sorted[2] if len(surf_sorted) > 2 else None
+
         cells = [
             {
                 "value": fmt_decimal(get_val(dmi_hav_row, "swell_hs_m")),
@@ -1331,32 +1361,41 @@ for block in day_blocks:
             },
             {"value": deg_to_arrow(get_val(wind_mix_row, "wind_dir_deg")), "style": wind_mix_style},
             {
-                "value": fmt_decimal(get_val(surf_row, "s0_height_m")),
-                "style": style_wave_height(get_val(surf_row, "s0_height_m")),
+                "value": fmt_decimal(get_val(primary, "h")) if primary else "-",
+                "style": style_wave_height(get_val(primary, "h")) if primary else "",
             },
             {
-                "value": fmt_integer(get_val(surf_row, "s0_period_s")),
-                "style": style_period(get_val(surf_row, "s0_period_s")),
-            },
-            {"value": format_surfline_dir(get_val(surf_row, "s0_dir_deg"), get_val(surf_row, "s0_dirMin_deg")), "style": ""},
-            {
-                "value": fmt_decimal(get_val(surf_row, "s1_height_m")),
-                "style": style_wave_height(get_val(surf_row, "s1_height_m")),
+                "value": fmt_integer(get_val(primary, "p")) if primary else "-",
+                "style": style_period(get_val(primary, "p")) if primary else "",
             },
             {
-                "value": fmt_integer(get_val(surf_row, "s1_period_s")),
-                "style": style_period(get_val(surf_row, "s1_period_s")),
-            },
-            {"value": format_surfline_dir(get_val(surf_row, "s1_dir_deg"), get_val(surf_row, "s1_dirMin_deg")), "style": ""},
-            {
-                "value": fmt_decimal(get_val(surf_row, "s2_height_m")),
-                "style": style_wave_height(get_val(surf_row, "s2_height_m")),
+                "value": format_surfline_dir(get_val(primary, "dir"), get_val(primary, "dirMin")) if primary else "-",
+                "style": "",
             },
             {
-                "value": fmt_integer(get_val(surf_row, "s2_period_s")),
-                "style": style_period(get_val(surf_row, "s2_period_s")),
+                "value": fmt_decimal(get_val(secondary, "h")) if secondary else "-",
+                "style": style_wave_height(get_val(secondary, "h")) if secondary else "",
             },
-            {"value": format_surfline_dir(get_val(surf_row, "s2_dir_deg"), get_val(surf_row, "s2_dirMin_deg")), "style": ""},
+            {
+                "value": fmt_integer(get_val(secondary, "p")) if secondary else "-",
+                "style": style_period(get_val(secondary, "p")) if secondary else "",
+            },
+            {
+                "value": format_surfline_dir(get_val(secondary, "dir"), get_val(secondary, "dirMin")) if secondary else "-",
+                "style": "",
+            },
+            {
+                "value": fmt_decimal(get_val(tertiary, "h")) if tertiary else "-",
+                "style": style_wave_height(get_val(tertiary, "h")) if tertiary else "",
+            },
+            {
+                "value": fmt_integer(get_val(tertiary, "p")) if tertiary else "-",
+                "style": style_period(get_val(tertiary, "p")) if tertiary else "",
+            },
+            {
+                "value": format_surfline_dir(get_val(tertiary, "dir"), get_val(tertiary, "dirMin")) if tertiary else "-",
+                "style": "",
+            },
             {
                 "value": fmt_decimal(get_val(dmi_hav_row, "swell_hs_m")),
                 "style": style_wave_height(get_val(dmi_hav_row, "swell_hs_m")),
@@ -1444,6 +1483,9 @@ line = format_dmi_metadata("DMI (WAM NSB)", MODEL_METADATA["dmi_hav"])
 if line:
     footer_lines.append(line)
 line = format_copernicus_metadata(MODEL_METADATA["copernicus"])
+if line:
+    footer_lines.append(line)
+line = format_surfline_metadata(MODEL_METADATA["surfline"])
 if line:
     footer_lines.append(line)
 line = format_dmi_metadata("DMI (HARMONIE Dini SF)", MODEL_METADATA["dmi_land"])
