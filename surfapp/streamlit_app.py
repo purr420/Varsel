@@ -384,6 +384,16 @@ def fmt_wind(speed, gust):
     if g == "-":
         return s
     return f"{s}({g})"
+
+
+def format_surfline_dir(main_deg, min_deg):
+    if main_deg is None and min_deg is None:
+        return "-"
+    arrow_main = deg_to_arrow(main_deg) if main_deg is not None else ""
+    if min_deg is None:
+        return arrow_main
+    arrow_min = deg_to_arrow(min_deg)
+    return f"{arrow_main}({arrow_min})"
 ARROWS = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"]
 
 
@@ -629,6 +639,7 @@ DMI_LAND_DATA = load_cache_by_hour("dmi_land_lista_cache.csv")
 OBS_LISTA_DATA = load_observasjoner_lista_data()
 MET_DATA = load_cache_by_hour("met_lista_cache.csv")
 COP_DATA = load_copernicus_public()
+SURFLINE_DATA = load_cache_by_hour("surfline_lista_cache.csv")
 def load_lindesnes_latest():
     path = os.path.join(DATA_CACHE_DIR, "lindesnes_fyr_cache.csv")
     if not os.path.exists(path):
@@ -1046,17 +1057,20 @@ for idx, d in enumerate(days):
 ALIGN = {
     1: "right", 2: "center", 3: "left",   # Dønning (new)
     4: "right", 5: "left",                # Vind (new)
-    6: "right", 7: "center", 8: "left",   # Dønning (DMI)
-    9: "center",                          # P.dom.
-    10: "right", 11: "center", 12: "left",# Vindbølger (DMI)
-    13: "right", 14: "center", 15: "left",# Vindbølger (CMEMS)
-    16: "right", 17: "center", 18: "left",# Swell (CMEMS)
-    19: "right", 20: "center", 21: "left",# 2nd Swell (CMEMS)
-    22: "right", 23: "left",              # Vind (Yr)
-    24: "right", 25: "left",              # Vind (DMI)
-    26: "right", 27: "left",              # Vind (målt)
-    28: "right", 29: "center",            # Temp (°C)
-    30: "center", 31: "center",           # Sky/Nedbør
+    6: "right", 7: "center", 8: "left",   # S1 Surfline
+    9: "right", 10: "center", 11: "left", # S2 Surfline
+    12: "right", 13: "center", 14: "left",# S3 Surfline
+    15: "right", 16: "center", 17: "left",# Dønning (DMI)
+    18: "center",                         # P.dom.
+    19: "right", 20: "center", 21: "left",# Vindbølger (DMI)
+    22: "right", 23: "center", 24: "left",# Vindbølger (CMEMS)
+    25: "right", 26: "center", 27: "left",# Swell (CMEMS)
+    28: "right", 29: "center", 30: "left",# 2nd Swell (CMEMS)
+    31: "right", 32: "left",              # Vind (Yr)
+    33: "right", 34: "left",              # Vind (DMI)
+    35: "right", 36: "left",              # Vind (målt)
+    37: "right", 38: "center",            # Temp (°C)
+    39: "center", 40: "center",           # Sky/Nedbør
 }
 DATA_COLUMNS = len(ALIGN)
 
@@ -1186,6 +1200,9 @@ html = f"""
     <th rowspan="2">Tid</th>
     <th colspan="3">Dønning</th>
     <th colspan="2">Vind</th>
+    <th colspan="3">S1 (Surfline)</th>
+    <th colspan="3">S2 (Surfline)</th>
+    <th colspan="3">S3 (Surfline)</th>
     <th colspan="3">Dønning (DMI)</th>
     <th>P.dom.</th>
     <th colspan="3">Vindbølger (DMI)</th>
@@ -1209,29 +1226,38 @@ html = f"""
     <th style="text-align:{col_align(6)}">(m)</th>
     <th style="text-align:{col_align(7)}">(s)</th>
     <th style="text-align:{col_align(8)}"></th>
-    <th style="text-align:{col_align(9)}">(s)</th>
-    <th style="text-align:{col_align(10)}">(m)</th>
-    <th style="text-align:{col_align(11)}">(s)</th>
-    <th style="text-align:{col_align(12)}"></th>
-    <th style="text-align:{col_align(13)}">(m)</th>
-    <th style="text-align:{col_align(14)}">(s)</th>
-    <th style="text-align:{col_align(15)}"></th>
-    <th style="text-align:{col_align(16)}">(m)</th>
-    <th style="text-align:{col_align(17)}">(s)</th>
-    <th style="text-align:{col_align(18)}"></th>
+    <th style="text-align:{col_align(9)}">(m)</th>
+    <th style="text-align:{col_align(10)}">(s)</th>
+    <th style="text-align:{col_align(11)}"></th>
+    <th style="text-align:{col_align(12)}">(m)</th>
+    <th style="text-align:{col_align(13)}">(s)</th>
+    <th style="text-align:{col_align(14)}"></th>
+    <th style="text-align:{col_align(15)}">(m)</th>
+    <th style="text-align:{col_align(16)}">(s)</th>
+    <th style="text-align:{col_align(17)}"></th>
+    <th style="text-align:{col_align(18)}">(s)</th>
     <th style="text-align:{col_align(19)}">(m)</th>
     <th style="text-align:{col_align(20)}">(s)</th>
     <th style="text-align:{col_align(21)}"></th>
-    <th style="text-align:{col_align(22)}">(m/s)</th>
-    <th style="text-align:{col_align(23)}"></th>
-    <th style="text-align:{col_align(24)}">(m/s)</th>
-    <th style="text-align:{col_align(25)}"></th>
-    <th style="text-align:{col_align(26)}">(m/s)</th>
+    <th style="text-align:{col_align(22)}">(m)</th>
+    <th style="text-align:{col_align(23)}">(s)</th>
+    <th style="text-align:{col_align(24)}"></th>
+    <th style="text-align:{col_align(25)}">(m)</th>
+    <th style="text-align:{col_align(26)}">(s)</th>
     <th style="text-align:{col_align(27)}"></th>
-    <th style="text-align:{col_align(28)}">Luft</th>
-    <th style="text-align:{col_align(29)}">Sjø</th>
-    <th style="text-align:{col_align(30)}">(%)</th>
-    <th style="text-align:{col_align(31)}">(mm)</th>
+    <th style="text-align:{col_align(28)}">(m)</th>
+    <th style="text-align:{col_align(29)}">(s)</th>
+    <th style="text-align:{col_align(30)}"></th>
+    <th style="text-align:{col_align(31)}">(m/s)</th>
+    <th style="text-align:{col_align(32)}"></th>
+    <th style="text-align:{col_align(33)}">(m/s)</th>
+    <th style="text-align:{col_align(34)}"></th>
+    <th style="text-align:{col_align(35)}">(m/s)</th>
+    <th style="text-align:{col_align(36)}"></th>
+    <th style="text-align:{col_align(37)}">Luft</th>
+    <th style="text-align:{col_align(38)}">Sjø</th>
+    <th style="text-align:{col_align(39)}">(%)</th>
+    <th style="text-align:{col_align(40)}">(mm)</th>
 </tr>
 </thead>
 
@@ -1272,6 +1298,7 @@ for block in day_blocks:
         met_row = MET_DATA.get(dt_key_utc)
         cop_row = COP_DATA.get(dt_key_utc)
         obs_row = OBS_LISTA_DATA.get(dt_key_utc)
+        surf_row = SURFLINE_DATA.get(dt_key_utc)
 
         # Wind (measured in past, Yr in future)
         if dt_key_utc <= now_utc:
@@ -1303,6 +1330,33 @@ for block in day_blocks:
                 "style": wind_mix_style,
             },
             {"value": deg_to_arrow(get_val(wind_mix_row, "wind_dir_deg")), "style": wind_mix_style},
+            {
+                "value": fmt_decimal(get_val(surf_row, "s0_height_m")),
+                "style": style_wave_height(get_val(surf_row, "s0_height_m")),
+            },
+            {
+                "value": fmt_integer(get_val(surf_row, "s0_period_s")),
+                "style": style_period(get_val(surf_row, "s0_period_s")),
+            },
+            {"value": format_surfline_dir(get_val(surf_row, "s0_dir_deg"), get_val(surf_row, "s0_dirMin_deg")), "style": ""},
+            {
+                "value": fmt_decimal(get_val(surf_row, "s1_height_m")),
+                "style": style_wave_height(get_val(surf_row, "s1_height_m")),
+            },
+            {
+                "value": fmt_integer(get_val(surf_row, "s1_period_s")),
+                "style": style_period(get_val(surf_row, "s1_period_s")),
+            },
+            {"value": format_surfline_dir(get_val(surf_row, "s1_dir_deg"), get_val(surf_row, "s1_dirMin_deg")), "style": ""},
+            {
+                "value": fmt_decimal(get_val(surf_row, "s2_height_m")),
+                "style": style_wave_height(get_val(surf_row, "s2_height_m")),
+            },
+            {
+                "value": fmt_integer(get_val(surf_row, "s2_period_s")),
+                "style": style_period(get_val(surf_row, "s2_period_s")),
+            },
+            {"value": format_surfline_dir(get_val(surf_row, "s2_dir_deg"), get_val(surf_row, "s2_dirMin_deg")), "style": ""},
             {
                 "value": fmt_decimal(get_val(dmi_hav_row, "swell_hs_m")),
                 "style": style_wave_height(get_val(dmi_hav_row, "swell_hs_m")),
