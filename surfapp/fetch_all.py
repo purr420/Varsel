@@ -401,6 +401,8 @@ def write_cache_and_readable_csv(
     metadata_lines: Optional[list[str]] = None,
     history_hours: int = 3,
     replace_existing: bool = False,
+    convert_dir_to_compass: bool = True,
+    dir_round_func=None,
 ) -> None:
     """
     Lagrer:
@@ -480,8 +482,10 @@ def write_cache_and_readable_csv(
             }
             for key in value_keys:
                 value = entry["data"].get(key)
-                if key.endswith("_dir_deg"):
+                if key.endswith("_dir_deg") and convert_dir_to_compass:
                     row_out[key] = deg_to_compass(value)
+                elif key.endswith("_dir_deg") and dir_round_func:
+                    row_out[key] = dir_round_func(value)
                 else:
                     row_out[key] = round1(value)
             writer.writerow(row_out)
@@ -549,6 +553,77 @@ def fetch_yr_lista() -> tuple[list[dict], dict]:
         rows.append(row)
 
     return rows, meta
+
+
+def fetch_surfline_lista() -> tuple[list[dict], list[str]]:
+    """
+    Hent surfline swell-forecast for Lista (3 første swells).
+    """
+    SPOT_ID = "60521386c79046102c0e2cfd"
+    DAYS = 5
+    url = f"https://services.surfline.com/kbyg/spots/forecasts/wave?spotId={SPOT_ID}&days={DAYS}"
+
+    try:
+        resp = requests.get(url, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        print(f"[surfline] Kunne ikke hente data: {exc}")
+        return [], []
+
+    wave_data = data.get("data", {}).get("wave", [])
+    meta = data.get("associated", {})
+
+    model_run_ts = meta.get("runInitializationTimestamp")
+    model_run_dt = datetime.fromtimestamp(model_run_ts, tz=UTC) if model_run_ts else None
+    meta_lines: list[str] = []
+    if model_run_dt:
+        meta_lines.append("Model run (UTC): " + model_run_dt.strftime("%Y-%m-%d %H:%M"))
+
+    def one_decimal(x):
+        try:
+            return round(float(x), 1)
+        except Exception:
+            return None
+
+    def round_deg(x):
+        try:
+            return round(float(x))
+        except Exception:
+            return None
+
+    rows: list[dict] = []
+    for hour in wave_data:
+        ts = hour.get("timestamp")
+        if ts is None:
+            continue
+        dt_utc = datetime.fromtimestamp(ts, tz=UTC)
+
+        sw = hour.get("swells", []) or []
+        s = sw[:3] + [{}] * max(0, 3 - len(sw))
+
+        row = {
+            "time_utc": dt_utc,
+            "s0_height_m": one_decimal(s[0].get("height")),
+            "s0_period_s": one_decimal(s[0].get("period")),
+            "s0_dir_deg": round_deg(s[0].get("direction")),
+            "s0_dirMin_deg": round_deg(s[0].get("directionMin")),
+            "s1_height_m": one_decimal(s[1].get("height")),
+            "s1_period_s": one_decimal(s[1].get("period")),
+            "s1_dir_deg": round_deg(s[1].get("direction")),
+            "s1_dirMin_deg": round_deg(s[1].get("directionMin")),
+            "s2_height_m": one_decimal(s[2].get("height")),
+            "s2_period_s": one_decimal(s[2].get("period")),
+            "s2_dir_deg": round_deg(s[2].get("direction")),
+            "s2_dirMin_deg": round_deg(s[2].get("directionMin")),
+            "probability": one_decimal(hour.get("probability")),
+            "impact0": one_decimal(s[0].get("impact")),
+            "impact1": one_decimal(s[1].get("impact")),
+            "impact2": one_decimal(s[2].get("impact")),
+        }
+        rows.append(row)
+
+    return rows, meta_lines
 
 
 # ---------------------------------------------------
@@ -1112,6 +1187,36 @@ def main():
         metadata_lines=meta_lines,
         history_hours=24,
     )
+
+    # 2) Surfline swell
+    surf_rows, surf_meta = fetch_surfline_lista()
+    if surf_rows:
+        write_cache_and_readable_csv(
+            "surfline_lista",
+            surf_rows,
+            [
+                "s0_height_m",
+                "s0_period_s",
+                "s0_dir_deg",
+                "s0_dirMin_deg",
+                "s1_height_m",
+                "s1_period_s",
+                "s1_dir_deg",
+                "s1_dirMin_deg",
+                "s2_height_m",
+                "s2_period_s",
+                "s2_dir_deg",
+                "s2_dirMin_deg",
+                "probability",
+                "impact0",
+                "impact1",
+                "impact2",
+            ],
+            metadata_lines=surf_meta,
+            history_hours=120,
+            convert_dir_to_compass=False,
+            dir_round_func=lambda v: round(v) if isinstance(v, (int, float)) else None,
+        )
 
     # 2) DMI HAV
     dmi_hav_result = fetch_dmi_hav_lista()
