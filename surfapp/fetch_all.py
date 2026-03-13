@@ -1,18 +1,19 @@
 import os
 import csv
 import io
-import json
-import base64
-import binascii
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Callable
+from typing import Optional
 from email.utils import parsedate_to_datetime
+from urllib.parse import urljoin
+import math
+import shutil
 
+import numpy as np
 import pandas as pd
+import pygrib
 import requests
 import pytz
 import subprocess
-import xarray as xr
 from dotenv import load_dotenv
 import re
 
@@ -32,19 +33,12 @@ LAST_RUN_FILE = os.path.join(CACHE_DIR, "fetch_all_last_run.txt")
 DMI_API_KEY_EDR = "ae501bfc-112e-400e-89df-77a2a6b9af72"
 DMI_API_KEY_STAC = "a4b09032-bca5-4255-ac85-6fea95a1e02c"
 FROST_CLIENT_ID = os.getenv("FROST_CLIENT_ID")
-COPERNICUS_LAT = 58.10
-COPERNICUS_LON = 6.56
-COPERNICUS_FORECAST_HOURS = 132
-COPERNICUS_DATASET = "cmems_mod_nws_wav_anfc_0.027deg_PT1H-i"
-COPERNICUS_RAW_FILE = os.path.join(CACHE_DIR, "copernicus_lista_raw.nc")
-COPERNICUS_PUBLIC_FILE = os.path.join(PUBLIC_DIR, "copernicus_lista_readable.csv")
-COPERNICUS_TOKEN_PATH = os.path.expanduser(
-    "~/.config/copernicusmarine/cmems-api-token.json"
-)
-COPERNICUS_CREDENTIALS_PATH = os.path.expanduser(
-    "~/.copernicusmarine/.copernicusmarine-credentials"
-)
-DISABLE_COPERNICUS_FETCH = os.getenv("DISABLE_COPERNICUS_FETCH") == "1"
+NOAA_BASE_PROD = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/"
+NOAA_LOOKBACK_DAYS = 5
+NOAA_FORECAST_HOURS = range(36)
+NOAA_LISTA_LAT = 58.0
+NOAA_LISTA_LON = 6.5
+NOAA_DOWNLOAD_ROOT = os.path.join(BASE_DIR, "downloads", "noaa")
 
 
 def ensure_dir(path: str) -> None:
@@ -53,100 +47,13 @@ def ensure_dir(path: str) -> None:
 # Ensure persistent directories exist
 ensure_dir(CACHE_DIR)
 ensure_dir(PUBLIC_DIR)
+ensure_dir(NOAA_DOWNLOAD_ROOT)
 
 
 def write_last_run_timestamp(dt: datetime) -> None:
     ensure_dir(CACHE_DIR)
     with open(LAST_RUN_FILE, "w", encoding="utf-8") as f:
         f.write(dt.astimezone(UTC).isoformat())
-
-
-def ensure_copernicus_auth() -> bool:
-    """Ensure either token JSON or legacy credential file is available."""
-
-    token_exists = os.path.exists(COPERNICUS_TOKEN_PATH)
-    cred_exists = os.path.exists(COPERNICUS_CREDENTIALS_PATH)
-    if token_exists or cred_exists:
-        return True
-
-    raw_payload = os.getenv("COPERNICUS_TOKEN_JSON")
-    fallback_b64 = os.getenv("COPERNICUS_TOKEN_JSON_B64") or os.getenv(
-        "COPERNICUS_TOKEN_JSON_BASE64"
-    )
-
-    def try_decode(value: Optional[str]) -> Optional[str]:
-        if not value:
-            return None
-        stripped = value.strip()
-        try:
-            decoded = base64.b64decode(stripped, validate=True)
-            return decoded.decode("utf-8")
-        except (binascii.Error, UnicodeDecodeError):
-            return value
-
-    payload = None
-    if raw_payload:
-        payload = try_decode(raw_payload)
-    if (not payload) and fallback_b64:
-        payload = try_decode(fallback_b64)
-
-    if not payload:
-        print(
-            "[copernicus] Fant ikke token eller credentials i miljøet – hopper over."
-        )
-        return False
-
-    stripped = payload.strip()
-    looks_json = stripped.startswith("{") or stripped.startswith("[")
-    looks_credentials = "username=" in stripped or stripped.startswith("[credentials]")
-
-    if looks_json:
-        try:
-            parsed = json.loads(stripped)
-        except json.JSONDecodeError:
-            print("[copernicus] ❌ Token-JSON kunne ikke parses – hopper over.")
-            return False
-        token_dir = os.path.dirname(COPERNICUS_TOKEN_PATH)
-        os.makedirs(token_dir, exist_ok=True)
-        try:
-            with open(COPERNICUS_TOKEN_PATH, "w", encoding="utf-8") as f:
-                json.dump(parsed, f)
-        except OSError as exc:
-            print(f"[copernicus] ❌ Kunne ikke skrive token-fil: {exc}")
-            return False
-        return True
-
-    if looks_credentials:
-        cred_dir = os.path.dirname(COPERNICUS_CREDENTIALS_PATH)
-        os.makedirs(cred_dir, exist_ok=True)
-        try:
-            with open(COPERNICUS_CREDENTIALS_PATH, "w", encoding="utf-8") as f:
-                f.write(stripped)
-        except OSError as exc:
-            print(f"[copernicus] ❌ Kunne ikke skrive credentials-fil: {exc}")
-            return False
-        return True
-
-    print("[copernicus] ❌ Ukjent token-format – hopper over.")
-    return False
-
-
-def get_existing_copernicus_run() -> Optional[datetime]:
-    """Return the model_run datetime (UTC) from the existing readable CSV, or None."""
-    path = COPERNICUS_PUBLIC_FILE
-    if not os.path.exists(path):
-        return None
-
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.startswith("# Model run (UTC):"):
-                    ts = line.split(":", 1)[1].strip()
-                    return parse_iso_utc(ts)
-    except Exception:
-        return None
-
-    return None
 
 
 def load_existing_csv(path: str) -> tuple[list[str], list[dict]]:
@@ -314,6 +221,214 @@ def parse_http_date(date_str: Optional[str]) -> Optional[datetime]:
     else:
         dt = dt.astimezone(UTC)
     return dt
+
+
+def noaa_run_id(date_str: str, run_str: str) -> str:
+    return f"{date_str}_t{run_str}z"
+
+
+def expected_noaa_run_dt(date_str: str, run_str: str) -> datetime:
+    return datetime.strptime(f"{date_str}{run_str}", "%Y%m%d%H").replace(tzinfo=UTC)
+
+
+def inspect_noaa_grib_identity(path: str) -> dict:
+    with pygrib.open(path) as grbs:
+        msg = grbs.message(1)
+        return {
+            "analDate": msg.analDate.replace(tzinfo=UTC),
+            "validDate": msg.validDate.replace(tzinfo=UTC),
+            "forecastTime": int(getattr(msg, "forecastTime", 0)),
+        }
+
+
+def get_existing_noaa_run_id() -> Optional[str]:
+    path = os.path.join(PUBLIC_DIR, "noaa_lista_readable.csv")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("# NOAA run:"):
+                    value = line.split(":", 1)[1].strip()
+                    return value or None
+    except OSError:
+        return None
+    return None
+
+
+def list_recent_noaa_runs(lookback_days: int = NOAA_LOOKBACK_DAYS) -> list[dict]:
+    now = datetime.now(UTC).date()
+    runs = []
+    for offset in range(lookback_days + 1):
+        date_obj = now - timedelta(days=offset)
+        date_str = date_obj.strftime("%Y%m%d")
+        runs_url = urljoin(NOAA_BASE_PROD, f"gfs.{date_str}/")
+        try:
+            response = requests.get(runs_url, timeout=20)
+            response.raise_for_status()
+        except Exception:
+            continue
+        run_matches = sorted(set(re.findall(r'href="(\d{2})/"', response.text)))
+        for run_str in run_matches:
+            wave_base = urljoin(runs_url, f"{run_str}/wave/gridded/")
+            f000_url = urljoin(wave_base, f"gfswave.t{run_str}z.arctic.9km.f000.grib2")
+            try:
+                head = requests.head(f000_url, timeout=20)
+            except Exception:
+                continue
+            if head.status_code != 200:
+                continue
+            run_dt = expected_noaa_run_dt(date_str, run_str)
+            runs.append(
+                {
+                    "date": date_str,
+                    "run": run_str,
+                    "run_dt": run_dt,
+                    "run_id": noaa_run_id(date_str, run_str),
+                    "wave_base": wave_base,
+                }
+            )
+    runs.sort(key=lambda item: item["run_dt"])
+    return runs
+
+
+def download_noaa_run_files(run_meta: dict) -> list[str]:
+    run_dir = os.path.join(NOAA_DOWNLOAD_ROOT, f"gfs.{run_meta['date']}", run_meta["run"])
+    ensure_dir(run_dir)
+    expected_dt = expected_noaa_run_dt(run_meta["date"], run_meta["run"])
+    downloaded: list[str] = []
+
+    for fh in NOAA_FORECAST_HOURS:
+        fname = f"gfswave.t{run_meta['run']}z.arctic.9km.f{fh:03d}.grib2"
+        path = os.path.join(run_dir, fname)
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            try:
+                ident = inspect_noaa_grib_identity(path)
+                if ident["analDate"] == expected_dt and ident["forecastTime"] == fh:
+                    downloaded.append(path)
+                    continue
+            except Exception:
+                pass
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+        url = urljoin(run_meta["wave_base"], fname)
+        response = requests.get(url, stream=True, timeout=120)
+        if response.status_code != 200:
+            raise RuntimeError(f"Missing NOAA file: {url}")
+        with open(path, "wb") as handle:
+            for chunk in response.iter_content(1024 * 1024):
+                if chunk:
+                    handle.write(chunk)
+
+        ident = inspect_noaa_grib_identity(path)
+        if ident["analDate"] != expected_dt or ident["forecastTime"] != fh:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            raise RuntimeError(f"GRIB identity mismatch for {path}")
+        downloaded.append(path)
+
+    return downloaded
+
+
+def pick_noaa_grid_point(f000_path: str) -> dict:
+    with pygrib.open(f000_path) as grbs:
+        lats, lons = grbs.message(1).latlons()
+        swh = grbs.select(shortName="swh")[0].values
+
+    target_lon = NOAA_LISTA_LON + 360 if (lons.max() > 180 and NOAA_LISTA_LON < 0) else NOAA_LISTA_LON
+    lat1 = np.deg2rad(NOAA_LISTA_LAT)
+    lon1 = np.deg2rad(target_lon)
+    lat2 = np.deg2rad(lats)
+    lon2 = np.deg2rad(lons)
+    a = (
+        np.sin((lat2 - lat1) / 2) ** 2
+        + np.cos(lat1) * np.cos(lat2) * np.sin((lon2 - lon1) / 2) ** 2
+    )
+    d = 6371 * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    iy_raw, ix_raw = np.unravel_index(np.argmin(d), d.shape)
+    raw_wet = math.isfinite(swh[iy_raw, ix_raw])
+    ys, xs = np.where(np.isfinite(swh))
+    k = np.argmin(d[ys, xs])
+    iy_wet, ix_wet = int(ys[k]), int(xs[k])
+    iy, ix = (iy_raw, ix_raw) if raw_wet else (iy_wet, ix_wet)
+
+    return {
+        "iy": int(iy),
+        "ix": int(ix),
+        "lat_used": float(lats[iy, ix]),
+        "lon_used": float(lons[iy, ix]),
+        "dist_km": float(d[iy, ix]),
+    }
+
+
+def build_noaa_lista_rows(run_meta: dict, files: list[str], chosen: dict) -> list[dict]:
+    rows: list[dict] = []
+    for path in files:
+        with pygrib.open(path) as grbs:
+            messages = list(grbs)
+        gd = {(g.shortName, getattr(g, "level", None)): g for g in messages}
+        iy = chosen["iy"]
+        ix = chosen["ix"]
+        valid_dt = messages[0].validDate.replace(tzinfo=UTC)
+
+        def read_value(short_name: str, level: int) -> Optional[float]:
+            msg = gd.get((short_name, level))
+            if msg is None:
+                return None
+            value_raw = msg.values[iy, ix]
+            if np.ma.is_masked(value_raw):
+                return None
+            value = float(value_raw)
+            if math.isnan(value):
+                return None
+            return value
+
+        rows.append(
+            {
+                "time_utc": valid_dt,
+                "WW_Hs (m)": read_value("shww", 1),
+                "WW_Tm01 (s)": read_value("mpww", 1),
+                "WW_Dir (°)": read_value("wvdir", 1),
+                "S1_Hs (m)": read_value("shts", 1),
+                "S1_Tm01 (s)": read_value("mpts", 1),
+                "S1_Dir (°)": read_value("swdir", 1),
+                "S2_Hs (m)": read_value("shts", 2),
+                "S2_Tm01 (s)": read_value("mpts", 2),
+                "S2_Dir (°)": read_value("swdir", 2),
+                "S3_Hs (m)": read_value("shts", 3),
+                "S3_Tm01 (s)": read_value("mpts", 3),
+                "S3_Dir (°)": read_value("swdir", 3),
+            }
+        )
+    return rows
+
+
+def cleanup_old_noaa_runs(active_run_meta: dict) -> None:
+    active_date_dir = f"gfs.{active_run_meta['date']}"
+    active_run_dir = active_run_meta["run"]
+
+    for date_name in os.listdir(NOAA_DOWNLOAD_ROOT):
+        date_path = os.path.join(NOAA_DOWNLOAD_ROOT, date_name)
+        if not os.path.isdir(date_path):
+            continue
+        if date_name != active_date_dir:
+            shutil.rmtree(date_path, ignore_errors=True)
+            continue
+
+        for run_name in os.listdir(date_path):
+            run_path = os.path.join(date_path, run_name)
+            if not os.path.isdir(run_path):
+                continue
+            if run_name != active_run_dir:
+                shutil.rmtree(run_path, ignore_errors=True)
+
+        if not os.listdir(date_path):
+            shutil.rmtree(date_path, ignore_errors=True)
 
 
 def fetch_dmi_stac_metadata(collection: str, api_key: str) -> Optional[dict]:
@@ -881,192 +996,64 @@ def fetch_met_lista() -> tuple[list[dict], dict]:
 
 
 # ---------------------------------------------------
-#  Copernicus – bølger
+#  NOAA – bølger
 # ---------------------------------------------------
 
-def fetch_copernicus_lista() -> bool:
-    if DISABLE_COPERNICUS_FETCH:
-        print("[copernicus] Skipping fetch (disabled via environment)")
+def fetch_noaa_lista() -> bool:
+    runs = list_recent_noaa_runs()
+    if not runs:
+        print("[noaa] Fant ingen tilgjengelige NOAA-runs.")
         return False
 
-    # --- Detect if new run is available ---
-    # Copernicus runs at 00Z and 12Z. Compute most likely current run.
-    now = datetime.now(UTC)
-    expected_run_hour = 0 if now.hour < 12 else 12
-    expected_run = datetime(now.year, now.month, now.day, expected_run_hour, tzinfo=UTC)
-
-    existing_run = get_existing_copernicus_run()
-    if existing_run and existing_run == expected_run:
-        print("[copernicus] No new model-run — skipping download.")
-        return False
-
-    ensure_dir(CACHE_DIR)
-    ensure_dir(PUBLIC_DIR)
-    if not ensure_copernicus_auth():
-        return False
-    for path in (COPERNICUS_RAW_FILE, COPERNICUS_PUBLIC_FILE):
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-
-    run_hour = 0 if now.hour < 12 else 12
-    run_time = datetime(now.year, now.month, now.day, run_hour, tzinfo=UTC)
-    desired_start = run_time - timedelta(hours=12)
-    desired_end = run_time + timedelta(hours=120)
-
-    start_str = desired_start.strftime("%Y-%m-%dT%H:%M:%SZ")
-    end_str = desired_end.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    cmd = [
-        "copernicusmarine",
-        "subset",
-        "--dataset-id",
-        COPERNICUS_DATASET,
-        "--variable",
-        "VHM0",
-        "--variable",
-        "VTPK",
-        "--variable",
-        "VTM02",
-        "--variable",
-        "VTM10",
-        "--variable",
-        "VPED",
-        "--variable",
-        "VHM0_WW",
-        "--variable",
-        "VTM01_WW",
-        "--variable",
-        "VMDR_WW",
-        "--variable",
-        "VHM0_SW1",
-        "--variable",
-        "VTM01_SW1",
-        "--variable",
-        "VMDR_SW1",
-        "--variable",
-        "VHM0_SW2",
-        "--variable",
-        "VTM01_SW2",
-        "--variable",
-        "VMDR_SW2",
-        "--minimum-longitude",
-        str(COPERNICUS_LON - 0.02),
-        "--maximum-longitude",
-        str(COPERNICUS_LON + 0.02),
-        "--minimum-latitude",
-        str(COPERNICUS_LAT - 0.02),
-        "--maximum-latitude",
-        str(COPERNICUS_LAT + 0.02),
-        "--start-datetime",
-        start_str,
-        "--end-datetime",
-        end_str,
-        "--output-filename",
-        COPERNICUS_RAW_FILE,
-    ]
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
-    except FileNotFoundError:
-        print("[copernicus] Fant ikke 'copernicusmarine' CLI – installer den før kjøring.")
-        return False
-    except subprocess.CalledProcessError as exc:
-        err = exc.stderr.strip() or exc.stdout.strip() or str(exc)
-        print(f"[copernicus] ❌ Feil ved nedlasting: {err}")
+    latest_run = runs[-1]
+    existing_run_id = get_existing_noaa_run_id()
+    if existing_run_id == latest_run["run_id"]:
+        print(f"[noaa] Siste NOAA-run finnes allerede lokalt: {existing_run_id}")
+        cleanup_old_noaa_runs(latest_run)
         return False
 
     try:
-        ds = xr.open_dataset(COPERNICUS_RAW_FILE)
-        pt = ds.sel(latitude=COPERNICUS_LAT, longitude=COPERNICUS_LON, method="nearest")
+        files = download_noaa_run_files(latest_run)
+        chosen = pick_noaa_grid_point(files[0])
+        rows_for_merge = build_noaa_lista_rows(latest_run, files, chosen)
     except Exception as exc:
-        print(f"[copernicus] ❌ Kunne ikke åpne/velge punkt: {exc}")
-        try:
-            ds.close()
-        except Exception:
-            pass
+        print(f"[noaa] ❌ Feil ved henting av NOAA-data: {exc}")
         return False
 
-    times = pd.to_datetime(pt["time"].values).tz_localize(UTC)
-
-    times = pd.to_datetime(pt["time"].values).tz_localize(UTC)
     value_keys = [
-        "Total_Hs (m)",
-        "Total_Tp (s)",
-        "Total_Tm02 (s)",
-        "Total_Tm10 (s)",
-        "Total_Dir (°)",
-        "Total_Dir_Compass",
         "WW_Hs (m)",
         "WW_Tm01 (s)",
         "WW_Dir (°)",
-        "WW_Dir_Compass",
         "S1_Hs (m)",
         "S1_Tm01 (s)",
         "S1_Dir (°)",
-        "S1_Dir_Compass",
         "S2_Hs (m)",
         "S2_Tm01 (s)",
         "S2_Dir (°)",
-        "S2_Dir_Compass",
+        "S3_Hs (m)",
+        "S3_Tm01 (s)",
+        "S3_Dir (°)",
     ]
-
-    rows_for_merge: list[dict] = []
-    for idx, dt in enumerate(times):
-        data = {
-            "time_utc": dt.to_pydatetime(),
-            "Total_Hs (m)": float(pt["VHM0"].values[idx].round(1)),
-            "Total_Tp (s)": float(pt["VTPK"].values[idx].round(1)),
-            "Total_Tm02 (s)": float(pt["VTM02"].values[idx].round(1)),
-            "Total_Tm10 (s)": float(pt["VTM10"].values[idx].round(1)),
-            "Total_Dir (°)": float(pt["VPED"].values[idx].round(0)),
-            "Total_Dir_Compass": deg_to_compass(pt["VPED"].values[idx]),
-            "WW_Hs (m)": float(pt["VHM0_WW"].values[idx].round(1)),
-            "WW_Tm01 (s)": float(pt["VTM01_WW"].values[idx].round(1)),
-            "WW_Dir (°)": float(pt["VMDR_WW"].values[idx].round(0)),
-            "WW_Dir_Compass": deg_to_compass(pt["VMDR_WW"].values[idx]),
-            "S1_Hs (m)": float(pt["VHM0_SW1"].values[idx].round(1)),
-            "S1_Tm01 (s)": float(pt["VTM01_SW1"].values[idx].round(1)),
-            "S1_Dir (°)": float(pt["VMDR_SW1"].values[idx].round(0)),
-            "S1_Dir_Compass": deg_to_compass(pt["VMDR_SW1"].values[idx]),
-            "S2_Hs (m)": float(pt["VHM0_SW2"].values[idx].round(1)),
-            "S2_Tm01 (s)": float(pt["VTM01_SW2"].values[idx].round(1)),
-            "S2_Dir (°)": float(pt["VMDR_SW2"].values[idx].round(0)),
-            "S2_Dir_Compass": deg_to_compass(pt["VMDR_SW2"].values[idx]),
-        }
-        rows_for_merge.append(data)
-
-    actual_lat = float(pt["latitude"].values)
-    actual_lon = float(pt["longitude"].values)
-
-    meta_lines: list[str] = [
-        "Model run (UTC): " + run_time.strftime("%Y-%m-%d %H:%M"),
-        "Hindcast window (UTC): "
-        + desired_start.strftime("%Y-%m-%d %H:%M")
-        + " -> "
-        + run_time.strftime("%Y-%m-%d %H:%M"),
-        "Forecast window (UTC): "
-        + run_time.strftime("%Y-%m-%d %H:%M")
-        + " -> "
-        + desired_end.strftime("%Y-%m-%d %H:%M"),
+    meta_lines = [
+        "Model run (UTC): " + latest_run["run_dt"].strftime("%Y-%m-%d %H:%M"),
+        f"NOAA run: {latest_run['run_id']}",
+        f"Grid point (lat,lon): {chosen['lat_used']:.4f}, {chosen['lon_used']:.4f}",
+        f"Distance to target (km): {chosen['dist_km']:.2f}",
+        f"Forecast steps: {len(rows_for_merge)}",
+        "Dataset: NOAA GFS Wave Arctic 9km",
     ]
-    meta_lines.append(f"Grid point (lat,lon): {actual_lat:.4f}, {actual_lon:.4f}")
-    meta_lines.append(f"Dataset: {COPERNICUS_DATASET}")
-
-    ds.close()
 
     write_cache_and_readable_csv(
-        "copernicus_lista",
+        "noaa_lista",
         rows_for_merge,
         value_keys,
         metadata_lines=meta_lines,
-        history_hours=3,
+        history_hours=0,
         replace_existing=True,
     )
-
-    print(f"[copernicus] Raw: {COPERNICUS_RAW_FILE}")
-    print(f"[copernicus] Lesbar: {COPERNICUS_PUBLIC_FILE}")
+    cleanup_old_noaa_runs(latest_run)
+    print(f"[noaa] Aktiv run: {latest_run['run_id']}")
+    print(f"[noaa] Download root: {NOAA_DOWNLOAD_ROOT}")
     return True
 # ---------------------------------------------------
 #  Lindesnes fyr – observasjon sjøtemperatur
@@ -1335,8 +1322,8 @@ def main():
     if obs_rows:
         write_observasjoner_lista(obs_rows)
 
-    # 7) Copernicus
-    fetch_copernicus_lista()
+    # 7) NOAA
+    fetch_noaa_lista()
 
 
 if __name__ == "__main__":

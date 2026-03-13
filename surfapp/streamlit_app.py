@@ -21,7 +21,6 @@ now_utc = datetime.now(UTC)
 now_oslo = now_utc.astimezone(OSLO_TZ)
 today_date = now_oslo.date()
 
-# Ensure Copernicus credential file exists on Streamlit Cloud
 st.set_page_config(layout="wide")
 
 # ---- Load daylight data ----
@@ -77,7 +76,7 @@ def ensure_recent_fetch(max_age_minutes: int = 15) -> Optional[datetime]:
             check=True,
             capture_output=True,
             text=True,
-            env={**os.environ, "DISABLE_COPERNICUS_FETCH": "1"},
+            env={**os.environ},
         )
         last = datetime.now(UTC)
         write_last_fetch_time(last)
@@ -99,7 +98,7 @@ def run_manual_fetch():
             check=True,
             capture_output=True,
             text=True,
-            env={**os.environ, "DISABLE_COPERNICUS_FETCH": "1"},
+            env={**os.environ},
         )
         now = datetime.now(UTC)
         write_last_fetch_time(now)
@@ -178,6 +177,8 @@ def read_metadata_from_cache(filename: str) -> Optional[dict]:
             for line in f:
                 if line.startswith("# Model run"):
                     metadata["model_run"] = parse_value(line.split(":", 1)[1])
+                elif line.startswith("# NOAA run"):
+                    metadata["noaa_run"] = line.split(":", 1)[1].strip()
                 elif line.startswith("# Created"):
                     metadata["created"] = parse_value(line.split(":", 1)[1])
     except OSError:
@@ -321,8 +322,8 @@ def parse_iso_dt(ts: str) -> datetime:
     return dt
 
 
-def load_copernicus_public():
-    path = os.path.join(DATA_PUBLIC_DIR, "copernicus_lista_readable.csv")
+def load_noaa_public():
+    path = os.path.join(DATA_PUBLIC_DIR, "noaa_lista_readable.csv")
     data = {}
     if not os.path.exists(path):
         return data
@@ -616,7 +617,7 @@ MODEL_METADATA = {
     "dmi_hav": read_metadata_from_cache("dmi_hav_lista_cache.csv") or {},
     "dmi_land": read_metadata_from_cache("dmi_land_lista_cache.csv") or {},
     "yr": read_metadata_from_cache("yr_lista_cache.csv") or {},
-    "copernicus": read_metadata_from_cache("copernicus_lista_cache.csv") or {},
+    "noaa": read_metadata_from_cache("noaa_lista_cache.csv") or {},
     "surfline": read_metadata_from_cache("surfline_lista_cache.csv") or {},
     "observasjoner_lista": read_metadata_from_cache("observasjoner_lista_cache.csv") or {},
 }
@@ -653,11 +654,14 @@ def format_yr_metadata(meta: dict) -> Optional[str]:
     return f"Yr (Locationforecast v2): Run (UTC) {run_display}"
 
 
-def format_copernicus_metadata(meta: dict) -> Optional[str]:
+def format_noaa_metadata(meta: dict) -> Optional[str]:
     run_display = format_run_display(meta.get("model_run"))
     if not run_display:
         return None
-    return f"Copernicus (CMEMS): Run (UTC) {run_display}"
+    run_id = meta.get("noaa_run")
+    if run_id:
+        return f"NOAA (GFS Wave Arctic 9km): Run (UTC) {run_display} [{run_id}]"
+    return f"NOAA (GFS Wave Arctic 9km): Run (UTC) {run_display}"
 
 
 def format_surfline_metadata(meta: dict) -> Optional[str]:
@@ -672,7 +676,7 @@ DMI_HAV_DATA = load_cache_by_hour("dmi_hav_lista_cache.csv")
 DMI_LAND_DATA = load_cache_by_hour("dmi_land_lista_cache.csv")
 OBS_LISTA_DATA = load_observasjoner_lista_data()
 MET_DATA = load_cache_by_hour("met_lista_cache.csv")
-COP_DATA = load_copernicus_public()
+NOAA_DATA = load_noaa_public()
 SURFLINE_DATA = load_cache_by_hour("surfline_lista_cache.csv")
 def load_lindesnes_latest():
     path = os.path.join(DATA_CACHE_DIR, "lindesnes_fyr_cache.csv")
@@ -876,7 +880,7 @@ header_last_light = format_oslo(usable_last_today, light["last_light"])
 tomorrow_date = today_date + timedelta(days=1)
 usable_first_tomorrow, usable_last_tomorrow = get_light_oslo_for_date(tomorrow_date)
 
-# Manual refresh button (fetch_all without Copernicus)
+# Manual refresh button
 # (Manual refresh button removed)
 
 # ---------------------------------------------------
@@ -1097,14 +1101,15 @@ ALIGN = {
     15: "right", 16: "center", 17: "left",# Dønning (DMI)
     18: "center",                         # P.dom.
     19: "right", 20: "center", 21: "left",# Vindbølger (DMI)
-    22: "right", 23: "center", 24: "left",# Vindbølger (CMEMS)
-    25: "right", 26: "center", 27: "left",# Swell (CMEMS)
-    28: "right", 29: "center", 30: "left",# 2nd Swell (CMEMS)
-    31: "right", 32: "left",              # Vind (Yr)
-    33: "right", 34: "left",              # Vind (DMI)
-    35: "right", 36: "left",              # Vind (målt)
-    37: "right", 38: "center",            # Temp (°C)
-    39: "center", 40: "center",           # Sky/Nedbør
+    22: "right", 23: "center", 24: "left",# Vindbølger (NOAA)
+    25: "right", 26: "center", 27: "left",# Swell (NOAA)
+    28: "right", 29: "center", 30: "left",# 2nd Swell (NOAA)
+    31: "right", 32: "center", 33: "left",# 3rd Swell (NOAA)
+    34: "right", 35: "left",              # Vind (Yr)
+    36: "right", 37: "left",              # Vind (DMI)
+    38: "right", 39: "left",              # Vind (målt)
+    40: "right", 41: "center",            # Temp (°C)
+    42: "center", 43: "center",           # Sky/Nedbør
 }
 DATA_COLUMNS = len(ALIGN)
 
@@ -1243,9 +1248,10 @@ html = f"""
     <th colspan="3">Dønning (DMI)</th>
     <th>P.dom.</th>
     <th colspan="3">Vindbølger (DMI)</th>
-    <th colspan="3">Vindbølger (CMEMS)</th>
-    <th colspan="3">Swell (CMEMS)</th>
-    <th colspan="3">2nd Swell (CMEMS)</th>
+    <th colspan="3">Vindbølger (NOAA)</th>
+    <th colspan="3">Swell (NOAA)</th>
+    <th colspan="3">2nd Swell (NOAA)</th>
+    <th colspan="3">3rd Swell (NOAA)</th>
     <th colspan="2">Vind (Yr)</th>
     <th colspan="2">Vind (DMI)</th>
     <th colspan="2">Vind (målt)</th>
@@ -1285,16 +1291,19 @@ html = f"""
     <th style="text-align:{col_align(28)}">(m)</th>
     <th style="text-align:{col_align(29)}">(s)</th>
     <th style="text-align:{col_align(30)}"></th>
-    <th style="text-align:{col_align(31)}">(m/s)</th>
-    <th style="text-align:{col_align(32)}"></th>
-    <th style="text-align:{col_align(33)}">(m/s)</th>
-    <th style="text-align:{col_align(34)}"></th>
-    <th style="text-align:{col_align(35)}">(m/s)</th>
-    <th style="text-align:{col_align(36)}"></th>
-    <th style="text-align:{col_align(37)}">Luft</th>
-    <th style="text-align:{col_align(38)}">Sjø</th>
-    <th style="text-align:{col_align(39)}">(%)</th>
-    <th style="text-align:{col_align(40)}">(mm)</th>
+    <th style="text-align:{col_align(31)}">(m)</th>
+    <th style="text-align:{col_align(32)}">(s)</th>
+    <th style="text-align:{col_align(33)}"></th>
+    <th style="text-align:{col_align(34)}">(m/s)</th>
+    <th style="text-align:{col_align(35)}"></th>
+    <th style="text-align:{col_align(36)}">(m/s)</th>
+    <th style="text-align:{col_align(37)}"></th>
+    <th style="text-align:{col_align(38)}">(m/s)</th>
+    <th style="text-align:{col_align(39)}"></th>
+    <th style="text-align:{col_align(40)}">Luft</th>
+    <th style="text-align:{col_align(41)}">Sjø</th>
+    <th style="text-align:{col_align(42)}">(%)</th>
+    <th style="text-align:{col_align(43)}">(mm)</th>
 </tr>
 </thead>
 
@@ -1333,7 +1342,7 @@ for block in day_blocks:
         dmi_land_row = DMI_LAND_DATA.get(dt_key_utc)
         wind_row = dmi_land_row if dmi_land_row else dmi_hav_row
         met_row = MET_DATA.get(dt_key_utc)
-        cop_row = COP_DATA.get(dt_key_utc)
+        noaa_row = NOAA_DATA.get(dt_key_utc)
         obs_row = OBS_LISTA_DATA.get(dt_key_utc)
         surf_row = SURFLINE_DATA.get(dt_key_utc)
 
@@ -1373,6 +1382,25 @@ for block in day_blocks:
         primary = surf_sorted[0] if len(surf_sorted) > 0 else None
         secondary = surf_sorted[1] if len(surf_sorted) > 1 else None
         tertiary = surf_sorted[2] if len(surf_sorted) > 2 else None
+
+        noaa_swells = []
+        if noaa_row:
+            for i in range(1, 4):
+                h = get_val(noaa_row, f"S{i}_Hs (m)")
+                p = get_val(noaa_row, f"S{i}_Tm01 (s)")
+                d = get_val(noaa_row, f"S{i}_Dir (°)")
+                score = None
+                if h is not None and p is not None:
+                    score = h * p
+                noaa_swells.append({"h": h, "p": p, "dir": d, "score": score})
+        noaa_swells_sorted = sorted(
+            noaa_swells,
+            key=lambda x: (x["score"] is not None, x["score"] if x["score"] is not None else -1),
+            reverse=True,
+        ) if noaa_swells else []
+        noaa_primary = noaa_swells_sorted[0] if len(noaa_swells_sorted) > 0 else None
+        noaa_secondary = noaa_swells_sorted[1] if len(noaa_swells_sorted) > 1 else None
+        noaa_tertiary = noaa_swells_sorted[2] if len(noaa_swells_sorted) > 2 else None
 
         cells = [
             {
@@ -1448,32 +1476,41 @@ for block in day_blocks:
             },
             {"value": render_dir_cell(get_val(dmi_hav_row, "windwave_dir_deg")), "style": ""},
             {
-                "value": fmt_decimal(get_val(cop_row, "WW_Hs (m)")),
-                "style": style_wave_height(get_val(cop_row, "WW_Hs (m)")),
+                "value": fmt_decimal(get_val(noaa_row, "WW_Hs (m)")),
+                "style": style_wave_height(get_val(noaa_row, "WW_Hs (m)")),
             },
             {
-                "value": fmt_decimal(get_val(cop_row, "WW_Tm01 (s)")),
-                "style": style_period(get_val(cop_row, "WW_Tm01 (s)")),
+                "value": fmt_decimal(get_val(noaa_row, "WW_Tm01 (s)")),
+                "style": style_period(get_val(noaa_row, "WW_Tm01 (s)")),
             },
-            {"value": render_dir_cell(get_val(cop_row, "WW_Dir (°)")), "style": ""},
+            {"value": render_dir_cell(get_val(noaa_row, "WW_Dir (°)")), "style": ""},
             {
-                "value": fmt_decimal(get_val(cop_row, "S1_Hs (m)")),
-                "style": style_wave_height(get_val(cop_row, "S1_Hs (m)")),
-            },
-            {
-                "value": fmt_decimal(get_val(cop_row, "S1_Tm01 (s)")),
-                "style": style_period(get_val(cop_row, "S1_Tm01 (s)")),
-            },
-            {"value": render_dir_cell(get_val(cop_row, "S1_Dir (°)")), "style": ""},
-            {
-                "value": fmt_decimal(get_val(cop_row, "S2_Hs (m)")),
-                "style": style_wave_height(get_val(cop_row, "S2_Hs (m)")),
+                "value": fmt_decimal(get_val(noaa_primary, "h")) if noaa_primary else "-",
+                "style": style_wave_height(get_val(noaa_primary, "h")) if noaa_primary else "",
             },
             {
-                "value": fmt_decimal(get_val(cop_row, "S2_Tm01 (s)")),
-                "style": style_period(get_val(cop_row, "S2_Tm01 (s)")),
+                "value": fmt_decimal(get_val(noaa_primary, "p")) if noaa_primary else "-",
+                "style": style_period(get_val(noaa_primary, "p")) if noaa_primary else "",
             },
-            {"value": render_dir_cell(get_val(cop_row, "S2_Dir (°)")), "style": ""},
+            {"value": render_dir_cell(get_val(noaa_primary, "dir")) if noaa_primary else "-", "style": ""},
+            {
+                "value": fmt_decimal(get_val(noaa_secondary, "h")) if noaa_secondary else "-",
+                "style": style_wave_height(get_val(noaa_secondary, "h")) if noaa_secondary else "",
+            },
+            {
+                "value": fmt_decimal(get_val(noaa_secondary, "p")) if noaa_secondary else "-",
+                "style": style_period(get_val(noaa_secondary, "p")) if noaa_secondary else "",
+            },
+            {"value": render_dir_cell(get_val(noaa_secondary, "dir")) if noaa_secondary else "-", "style": ""},
+            {
+                "value": fmt_decimal(get_val(noaa_tertiary, "h")) if noaa_tertiary else "-",
+                "style": style_wave_height(get_val(noaa_tertiary, "h")) if noaa_tertiary else "",
+            },
+            {
+                "value": fmt_decimal(get_val(noaa_tertiary, "p")) if noaa_tertiary else "-",
+                "style": style_period(get_val(noaa_tertiary, "p")) if noaa_tertiary else "",
+            },
+            {"value": render_dir_cell(get_val(noaa_tertiary, "dir")) if noaa_tertiary else "-", "style": ""},
             {
                 "value": fmt_wind(get_val(yr_row, "wind_speed_ms"), get_val(yr_row, "gust_speed_ms")),
                 "style": style_gust(get_val(yr_row, "gust_speed_ms")),
@@ -1511,7 +1548,7 @@ footer_lines = []
 line = format_dmi_metadata("DMI (WAM NSB)", MODEL_METADATA["dmi_hav"])
 if line:
     footer_lines.append(line)
-line = format_copernicus_metadata(MODEL_METADATA["copernicus"])
+line = format_noaa_metadata(MODEL_METADATA["noaa"])
 if line:
     footer_lines.append(line)
 line = format_surfline_metadata(MODEL_METADATA["surfline"])
