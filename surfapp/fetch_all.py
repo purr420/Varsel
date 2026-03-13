@@ -1165,165 +1165,178 @@ def write_observasjoner_lista(entries: list[dict]) -> None:
     )
 
 
+def run_step(name: str, fn) -> None:
+    try:
+        fn()
+    except Exception as exc:
+        print(f"[{name}] ❌ Steg feilet: {exc}")
+
+
 # ---------------------------------------------------
 #  MAIN – kjør alle fetch + skriv CSV
 # ---------------------------------------------------
 
 def main():
-    # 1) YR
-    yr_rows, yr_meta = fetch_yr_lista()
-    meta_lines = []
-    if yr_meta.get("model_run"):
-        meta_lines.append(
-            "Model run (UTC): "
-            + yr_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
-        )
-    write_cache_and_readable_csv(
-        "yr_lista",
-        yr_rows,
-        ["wind_speed_ms", "wind_dir_deg", "gust_speed_ms", "cloud_cover_pct", "precip_mm"],
-        metadata_lines=meta_lines,
-        history_hours=24,
-    )
-
-    # 2) Surfline swell
-    surf_rows, surf_meta = fetch_surfline_lista()
-    if surf_rows:
-        write_cache_and_readable_csv(
-            "surfline_lista",
-            surf_rows,
-            [
-                "s1_h",
-                "s1_p",
-                "s1_dir",
-                "s1_dirMin",
-                "s2_h",
-                "s2_p",
-                "s2_dir",
-                "s2_dirMin",
-                "s3_h",
-                "s3_p",
-                "s3_dir",
-                "s3_dirMin",
-                "s4_h",
-                "s4_p",
-                "s4_dir",
-                "s4_dirMin",
-                "s5_h",
-                "s5_p",
-                "s5_dir",
-                "s5_dirMin",
-                "s6_h",
-                "s6_p",
-                "s6_dir",
-                "s6_dirMin",
-                "s1_impact",
-                "s2_impact",
-                "s3_impact",
-                "s4_impact",
-                "s5_impact",
-                "s6_impact",
-            ],
-            metadata_lines=surf_meta,
-            history_hours=120,
-            convert_dir_to_compass=False,
-            dir_round_func=lambda v: round(v, 1) if isinstance(v, (int, float)) else None,
-            value_formatter=lambda k, v: v,
-        )
-
-    # 2) DMI HAV
-    dmi_hav_result = fetch_dmi_hav_lista()
-    if dmi_hav_result:
-        dmi_hav_rows, dmi_hav_meta = dmi_hav_result
-        if dmi_hav_rows:
-            meta_lines = []
-            if dmi_hav_meta.get("model_run"):
-                meta_lines.append(
-                    "Model run (UTC): "
-                    + dmi_hav_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
-                )
-            if dmi_hav_meta.get("created"):
-                meta_lines.append(
-                    "Created (UTC): "
-                    + dmi_hav_meta["created"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
-                )
-            write_cache_and_readable_csv(
-                "dmi_hav_lista",
-                dmi_hav_rows,
-                [
-                    "wind_speed_ms",
-                    "wind_dir_deg",
-                    "hs_m",
-                    "tp_s",
-                    "mean_wave_period_s",
-                    "mean_zerocrossing_period_s",
-                    "mean_wave_dir_deg",
-                    "windwave_hs_m",
-                    "windwave_tp_s",
-                    "windwave_dir_deg",
-                    "swell_hs_m",
-                    "swell_tp_s",
-                    "swell_dir_deg",
-                    "benjamin_feir_index",
-                ],
-                metadata_lines=meta_lines,
-            )
-
-    # 3) DMI LAND
-    dmi_land_result = fetch_dmi_land_lista()
-    if dmi_land_result:
-        dmi_land_rows, dmi_land_meta = dmi_land_result
-        if dmi_land_rows:
-            meta_lines = []
-            if dmi_land_meta.get("model_run"):
-                meta_lines.append(
-                    "Model run (UTC): "
-                    + dmi_land_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
-                )
-            if dmi_land_meta.get("created"):
-                meta_lines.append(
-                    "Created (UTC): "
-                    + dmi_land_meta["created"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
-                )
-            write_cache_and_readable_csv(
-                "dmi_land_lista",
-                dmi_land_rows,
-                ["wind_speed_ms", "wind_dir_deg", "gust_speed_ms", "temp_air_c"],
-                metadata_lines=meta_lines,
-            )
-
-    # 4) MET
-    met_rows, met_meta = fetch_met_lista()
-    if met_rows:
+    def step_yr():
+        yr_rows, yr_meta = fetch_yr_lista()
         meta_lines = []
-        if met_meta.get("model_run"):
+        if yr_meta.get("model_run"):
             meta_lines.append(
                 "Model run (UTC): "
-                + met_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+                + yr_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
             )
         write_cache_and_readable_csv(
-            "met_lista",
-            met_rows,
-            ["sea_temp_c"],
+            "yr_lista",
+            yr_rows,
+            ["wind_speed_ms", "wind_dir_deg", "gust_speed_ms", "cloud_cover_pct", "precip_mm"],
             metadata_lines=meta_lines,
+            history_hours=24,
         )
 
-    # 5) Lindesnes fyr
-    lind_rows = fetch_lindesnes_fyr()
-    if lind_rows:
-        write_cache_and_readable_csv(
-            "lindesnes_fyr",
-            lind_rows,
-            ["sea_temp_raw", "sea_temp_c", "obs_date_label"],
-        )
+    def step_surfline():
+        surf_rows, surf_meta = fetch_surfline_lista()
+        if surf_rows:
+            write_cache_and_readable_csv(
+                "surfline_lista",
+                surf_rows,
+                [
+                    "s1_h",
+                    "s1_p",
+                    "s1_dir",
+                    "s1_dirMin",
+                    "s2_h",
+                    "s2_p",
+                    "s2_dir",
+                    "s2_dirMin",
+                    "s3_h",
+                    "s3_p",
+                    "s3_dir",
+                    "s3_dirMin",
+                    "s4_h",
+                    "s4_p",
+                    "s4_dir",
+                    "s4_dirMin",
+                    "s5_h",
+                    "s5_p",
+                    "s5_dir",
+                    "s5_dirMin",
+                    "s6_h",
+                    "s6_p",
+                    "s6_dir",
+                    "s6_dirMin",
+                    "s1_impact",
+                    "s2_impact",
+                    "s3_impact",
+                    "s4_impact",
+                    "s5_impact",
+                    "s6_impact",
+                ],
+                metadata_lines=surf_meta,
+                history_hours=120,
+                convert_dir_to_compass=False,
+                dir_round_func=lambda v: round(v, 1) if isinstance(v, (int, float)) else None,
+                value_formatter=lambda k, v: v,
+            )
 
-    # 6) Observasjoner Lista (Frost)
-    obs_rows = fetch_observasjoner_lista()
-    if obs_rows:
-        write_observasjoner_lista(obs_rows)
+    def step_dmi_hav():
+        dmi_hav_result = fetch_dmi_hav_lista()
+        if dmi_hav_result:
+            dmi_hav_rows, dmi_hav_meta = dmi_hav_result
+            if dmi_hav_rows:
+                meta_lines = []
+                if dmi_hav_meta.get("model_run"):
+                    meta_lines.append(
+                        "Model run (UTC): "
+                        + dmi_hav_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+                    )
+                if dmi_hav_meta.get("created"):
+                    meta_lines.append(
+                        "Created (UTC): "
+                        + dmi_hav_meta["created"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+                    )
+                write_cache_and_readable_csv(
+                    "dmi_hav_lista",
+                    dmi_hav_rows,
+                    [
+                        "wind_speed_ms",
+                        "wind_dir_deg",
+                        "hs_m",
+                        "tp_s",
+                        "mean_wave_period_s",
+                        "mean_zerocrossing_period_s",
+                        "mean_wave_dir_deg",
+                        "windwave_hs_m",
+                        "windwave_tp_s",
+                        "windwave_dir_deg",
+                        "swell_hs_m",
+                        "swell_tp_s",
+                        "swell_dir_deg",
+                        "benjamin_feir_index",
+                    ],
+                    metadata_lines=meta_lines,
+                )
 
-    # 7) NOAA
-    fetch_noaa_lista()
+    def step_dmi_land():
+        dmi_land_result = fetch_dmi_land_lista()
+        if dmi_land_result:
+            dmi_land_rows, dmi_land_meta = dmi_land_result
+            if dmi_land_rows:
+                meta_lines = []
+                if dmi_land_meta.get("model_run"):
+                    meta_lines.append(
+                        "Model run (UTC): "
+                        + dmi_land_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+                    )
+                if dmi_land_meta.get("created"):
+                    meta_lines.append(
+                        "Created (UTC): "
+                        + dmi_land_meta["created"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+                    )
+                write_cache_and_readable_csv(
+                    "dmi_land_lista",
+                    dmi_land_rows,
+                    ["wind_speed_ms", "wind_dir_deg", "gust_speed_ms", "temp_air_c"],
+                    metadata_lines=meta_lines,
+                )
+
+    def step_met():
+        met_rows, met_meta = fetch_met_lista()
+        if met_rows:
+            meta_lines = []
+            if met_meta.get("model_run"):
+                meta_lines.append(
+                    "Model run (UTC): "
+                    + met_meta["model_run"].astimezone(UTC).strftime("%Y-%m-%d %H:%M")
+                )
+            write_cache_and_readable_csv(
+                "met_lista",
+                met_rows,
+                ["sea_temp_c"],
+                metadata_lines=meta_lines,
+            )
+
+    def step_lindesnes():
+        lind_rows = fetch_lindesnes_fyr()
+        if lind_rows:
+            write_cache_and_readable_csv(
+                "lindesnes_fyr",
+                lind_rows,
+                ["sea_temp_raw", "sea_temp_c", "obs_date_label"],
+            )
+
+    def step_observasjoner():
+        obs_rows = fetch_observasjoner_lista()
+        if obs_rows:
+            write_observasjoner_lista(obs_rows)
+
+    run_step("yr_lista", step_yr)
+    run_step("surfline_lista", step_surfline)
+    run_step("dmi_hav_lista", step_dmi_hav)
+    run_step("dmi_land_lista", step_dmi_land)
+    run_step("met_lista", step_met)
+    run_step("lindesnes_fyr", step_lindesnes)
+    run_step("observasjoner_lista", step_observasjoner)
+    run_step("noaa_lista", fetch_noaa_lista)
 
 
 if __name__ == "__main__":

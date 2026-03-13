@@ -4,11 +4,7 @@ from datetime import datetime, timedelta, date
 from typing import Optional
 import pytz
 import csv
-import json
 import re
-import subprocess
-import sys
-import shutil
 import requests
 
 from modules.daylight import load_daylight_table, get_light_times
@@ -29,7 +25,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_CACHE_DIR = os.path.join(BASE_DIR, "data_cache")
 DATA_PUBLIC_DIR = os.path.join(BASE_DIR, "data_public")
 YR_CACHE_PATH = os.path.join(DATA_CACHE_DIR, "yr_lista_cache.csv")
-FETCH_SCRIPT = os.path.join(BASE_DIR, "fetch_all.py")
 FETCH_TIMESTAMP_PATH = os.path.join(DATA_CACHE_DIR, "fetch_all_last_run.txt")
 
 
@@ -57,59 +52,7 @@ def read_last_fetch_time() -> Optional[datetime]:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     return dt.astimezone(UTC)
-
-
-def write_last_fetch_time(dt: datetime) -> None:
-    ensure_data_cache_dir()
-    with open(FETCH_TIMESTAMP_PATH, "w", encoding="utf-8") as f:
-        f.write(dt.astimezone(UTC).isoformat())
-
-
-def ensure_recent_fetch(max_age_minutes: int = 15) -> Optional[datetime]:
-    last = read_last_fetch_time()
-    needs_fetch = last is None or (now_utc - last) > timedelta(minutes=max_age_minutes)
-    if not needs_fetch:
-        return last
-    try:
-        proc = subprocess.run(
-            [sys.executable, FETCH_SCRIPT],
-            check=True,
-            capture_output=True,
-            text=True,
-            env={**os.environ},
-        )
-        last = datetime.now(UTC)
-        write_last_fetch_time(last)
-    except subprocess.CalledProcessError as exc:
-        err = exc.stderr.strip() or exc.stdout.strip() or str(exc)
-        st.warning(f"Kunne ikke oppdatere data automatisk: {err}")
-    except Exception as exc:
-        st.warning(f"Kunne ikke oppdatere data automatisk: {exc}")
-    return read_last_fetch_time()
-
-
-LAST_FETCH_UTC = ensure_recent_fetch()
-
-
-def run_manual_fetch():
-    try:
-        subprocess.run(
-            [sys.executable, FETCH_SCRIPT],
-            check=True,
-            capture_output=True,
-            text=True,
-            env={**os.environ},
-        )
-        now = datetime.now(UTC)
-        write_last_fetch_time(now)
-        st.success(f"Data oppdatert {now.astimezone(OSLO_TZ).strftime('%H:%M')}")
-        return True
-    except subprocess.CalledProcessError as exc:
-        err = exc.stderr.strip() or exc.stdout.strip() or str(exc)
-        st.warning(f"Kunne ikke oppdatere data: {err}")
-    except Exception as exc:
-        st.warning(f"Kunne ikke oppdatere data: {exc}")
-    return False
+LAST_FETCH_UTC = read_last_fetch_time()
 
 
 def load_yr_cloud_rows():
