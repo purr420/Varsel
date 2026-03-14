@@ -1,4 +1,4 @@
-# Model run (UTC): 2026-03-14 03:29
+# Model run (UTC): 2026-03-14 04:28
 time_utc,time_local,wind_speed_ms,wind_dir_deg,gust_speed_ms,cloud_cover_pct,precip_mm
 2026-03-13T11:00:00+00:00,12:00,9.2,SW,15.4,88.0,0.0
 2026-03-13T12:00:00+00:00,13:00,10.2,SW,14.7,73.6,0.0
