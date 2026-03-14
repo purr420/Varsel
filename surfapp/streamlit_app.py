@@ -289,6 +289,36 @@ def load_noaa_public():
                 parsed[key] = try_parse_float(val)
             data[dt_oslo] = parsed
     return data
+
+
+def load_tide_spot_data(spot_name: str):
+    path = os.path.join(DATA_CACHE_DIR, "tides_norway_spots_cache.csv")
+    data = {}
+    if not os.path.exists(path):
+        return data
+
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(line for line in f if not line.startswith("#"))
+        for row in reader:
+            if row.get("spot") != spot_name:
+                continue
+            ts = row.get("time_utc")
+            if not ts:
+                continue
+            try:
+                dt = parse_iso_dt(ts)
+            except ValueError:
+                continue
+            dt_utc = dt.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+            parsed = {}
+            for key, val in row.items():
+                if key == "time_utc":
+                    continue
+                parsed[key] = try_parse_float(val)
+            data[dt_utc] = parsed
+    return data
+
+
 def deg_to_compass(deg):
     if deg is None:
         return "-"
@@ -621,6 +651,7 @@ OBS_LISTA_DATA = load_observasjoner_lista_data()
 MET_DATA = load_cache_by_hour("met_lista_cache.csv")
 NOAA_DATA = load_noaa_public()
 SURFLINE_DATA = load_cache_by_hour("surfline_lista_cache.csv")
+TIDE_LISTA_DATA = load_tide_spot_data("Lista")
 def load_lindesnes_latest():
     path = os.path.join(DATA_CACHE_DIR, "lindesnes_fyr_cache.csv")
     if not os.path.exists(path):
@@ -1051,8 +1082,9 @@ ALIGN = {
     34: "right", 35: "left",              # Vind (Yr)
     36: "right", 37: "left",              # Vind (DMI)
     38: "right", 39: "left",              # Vind (målt)
-    40: "right", 41: "center",            # Temp (°C)
-    42: "center", 43: "center",           # Sky/Nedbør
+    40: "right",                          # Vannstand
+    41: "right", 42: "center",            # Temp (°C)
+    43: "center", 44: "center",           # Sky/Nedbør
 }
 DATA_COLUMNS = len(ALIGN)
 
@@ -1198,6 +1230,7 @@ html = f"""
     <th colspan="2">Vind (Yr)</th>
     <th colspan="2">Vind (DMI)</th>
     <th colspan="2">Vind (målt)</th>
+    <th>Vannstand</th>
     <th colspan="2">Temp (°C)</th>
     <th>Skydekke</th>
     <th>Nedbør</th>
@@ -1243,10 +1276,11 @@ html = f"""
     <th style="text-align:{col_align(37)}"></th>
     <th style="text-align:{col_align(38)}">(m/s)</th>
     <th style="text-align:{col_align(39)}"></th>
-    <th style="text-align:{col_align(40)}">Luft</th>
-    <th style="text-align:{col_align(41)}">Sjø</th>
-    <th style="text-align:{col_align(42)}">(%)</th>
-    <th style="text-align:{col_align(43)}">(mm)</th>
+    <th style="text-align:{col_align(40)}">(cm)</th>
+    <th style="text-align:{col_align(41)}">Luft</th>
+    <th style="text-align:{col_align(42)}">Sjø</th>
+    <th style="text-align:{col_align(43)}">(%)</th>
+    <th style="text-align:{col_align(44)}">(mm)</th>
 </tr>
 </thead>
 
@@ -1288,6 +1322,7 @@ for block in day_blocks:
         noaa_row = NOAA_DATA.get(dt_key_utc)
         obs_row = OBS_LISTA_DATA.get(dt_key_utc)
         surf_row = SURFLINE_DATA.get(dt_key_utc)
+        tide_row = TIDE_LISTA_DATA.get(dt_key_utc)
 
         # Wind (measured in past, Yr in future)
         if dt_key_utc <= now_utc:
@@ -1469,6 +1504,14 @@ for block in day_blocks:
                 "style": style_gust(get_val(obs_row, "gust_speed_ms")),
             },
             {"value": render_dir_cell(get_val(obs_row, "wind_dir_deg")), "style": ""},
+            {
+                "value": fmt_integer(
+                    to_float(get_val(tide_row, "total_water_level_m")) * 100
+                    if to_float(get_val(tide_row, "total_water_level_m")) is not None
+                    else None
+                ),
+                "style": "",
+            },
             {"value": fmt_integer(get_val(dmi_land_row, "temp_air_c")), "style": ""},
             {"value": fmt_integer(get_val(met_row, "sea_temp_c")), "style": ""},
             {"value": fmt_integer(get_val(yr_row, "cloud_cover_pct")), "style": ""},
@@ -1503,6 +1546,7 @@ if line:
 line = format_yr_metadata(MODEL_METADATA["yr"])
 if line:
     footer_lines.append(line)
+footer_lines.append("Vannstand: MET TOTAL vannstand (cm) via Kartverket/MET tide, naermeste stasjon Tregde")
 
 if footer_lines:
     html += '<div class="model-run-wrapper">'

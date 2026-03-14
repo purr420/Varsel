@@ -18,6 +18,7 @@ TARGETS=(
   "surfapp/publish_streamlit_git.sh"
   "surfapp/update_and_publish.sh"
   "surfapp/fetch_all.py"
+  "surfapp/fetch_tides_norway.py"
   "surfapp/streamlit_app.py"
   "surfapp/data_cache/fetch_all_last_run.txt"
   "surfapp/data_cache/dmi_hav_lista_cache.csv"
@@ -27,6 +28,8 @@ TARGETS=(
   "surfapp/data_cache/met_lista_cache.csv"
   "surfapp/data_cache/noaa_lista_cache.csv"
   "surfapp/data_cache/observasjoner_lista_cache.csv"
+  "surfapp/data_cache/tide_spot_stations.csv"
+  "surfapp/data_cache/tides_norway_spots_cache.csv"
   "surfapp/data_cache/surfline_lista_cache.csv"
   "surfapp/data_cache/yr_lista_cache.csv"
   "surfapp/data_public/dmi_hav_lista_readable.csv"
@@ -37,6 +40,7 @@ TARGETS=(
   "surfapp/data_public/noaa_lista_readable.csv"
   "surfapp/data_public/observasjoner_lista_readable.csv"
   "surfapp/data_public/surfline_lista_readable.csv"
+  "surfapp/data_public/tides_norway_spots_readable.csv"
   "surfapp/data_public/yr_lista_readable.csv"
 )
 

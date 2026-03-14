@@ -1,9 +1,2 @@
 spot,spot_lat,spot_lon,station_name,station_code,station_lat,station_lon,distance_km,met_harbor_slug
 Lista,58.000000,6.500000,Tregde,TRG,58.006377,7.554759,62.1,tregde
-Pigsty/Piggy,58.750000,5.250000,Sirevåg,SIE,58.505200,5.791602,41.5,sirevåg
-Saltstein,58.750000,9.750000,Helgeroa,HRO,58.995212,9.856379,27.9,helgeroa
-Ervika,62.250000,5.000000,Måløy,MAY,61.933776,5.113310,35.7,måløy
-Alnes Lighthouse (Godoy),62.500000,5.750000,Ålesund,AES,62.469414,6.151946,20.9,ålesund
-Hustadvika Gjestegard,63.000000,7.000000,Kristiansund,KSU,63.113920,7.736140,39.2,kristiansund
-Unstad Beach,68.250000,13.250000,Kabelvåg,KAB,68.212639,14.482149,51.0,kabelvåg
-Persfjord,70.500000,31.000000,Vardø,VAW,70.374978,31.104015,14.4,vardø
