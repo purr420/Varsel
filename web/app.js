@@ -7,8 +7,6 @@ const NORWAY_BOUNDS = {
   east: 32.2,
 };
 const COAST_BUFFER_KM = 100;
-const GRID_LAT_STEP = 0.18;
-const GRID_LON_STEP = 0.27;
 
 const map = L.map("map", {
   zoomControl: true,
@@ -20,19 +18,12 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap",
 }).addTo(map);
 
-map.createPane("darknessPane");
-map.getPane("darknessPane").style.zIndex = 320;
-map.getPane("darknessPane").style.pointerEvents = "none";
-map.getPane("darknessPane").style.mixBlendMode = "multiply";
-
 map.createPane("frontPane");
 map.getPane("frontPane").style.zIndex = 330;
 map.getPane("frontPane").style.pointerEvents = "none";
 
 const spotLayer = L.featureGroup().addTo(map);
 const spotMarkers = [];
-const darknessRenderer = L.canvas({ pane: "darknessPane" });
-const frontRenderer = L.canvas({ pane: "frontPane" });
 
 const osloPartsFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: OSLO_TIMEZONE,
@@ -176,9 +167,11 @@ legend.onAdd = function () {
 legend.addTo(map);
 
 let bufferedNorway = null;
-const darknessLayer = L.layerGroup().addTo(map);
-const frontLayer = L.layerGroup().addTo(map);
-const darknessCells = [];
+const overlayCanvas = L.DomUtil.create("canvas", "daylight-overlay", map.getPane("frontPane"));
+overlayCanvas.style.position = "absolute";
+overlayCanvas.style.top = "0";
+overlayCanvas.style.left = "0";
+overlayCanvas.style.pointerEvents = "none";
 
 function smoothstep(edge0, edge1, value) {
   const x = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
@@ -210,74 +203,86 @@ function frontOpacityForAltitude(altitude) {
   return 0.3 * (1 - smoothstep(-1, 2, altitude));
 }
 
-function buildDarknessGrid() {
-  darknessLayer.clearLayers();
-  frontLayer.clearLayers();
-  darknessCells.length = 0;
+function resizeOverlayCanvas() {
+  const size = map.getSize();
+  const dpr = window.devicePixelRatio || 1;
+  overlayCanvas.width = Math.round(size.x * dpr);
+  overlayCanvas.height = Math.round(size.y * dpr);
+  overlayCanvas.style.width = `${size.x}px`;
+  overlayCanvas.style.height = `${size.y}px`;
+  const ctx = overlayCanvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, width: size.x, height: size.y };
+}
 
-  if (!bufferedNorway) {
-    return;
-  }
+function drawFeaturePath(ctx, feature) {
+  const polygons = feature.geometry.type === "Polygon"
+    ? [feature.geometry.coordinates]
+    : feature.geometry.coordinates;
 
-  for (let lat = NORWAY_BOUNDS.south; lat < NORWAY_BOUNDS.north; lat += GRID_LAT_STEP) {
-    for (let lon = NORWAY_BOUNDS.west; lon < NORWAY_BOUNDS.east; lon += GRID_LON_STEP) {
-      const center = turf.point([lon + GRID_LON_STEP / 2, lat + GRID_LAT_STEP / 2]);
-      if (!turf.booleanPointInPolygon(center, bufferedNorway)) {
-        continue;
-      }
-
-      const rect = L.rectangle(
-        [
-          [lat, lon],
-          [Math.min(lat + GRID_LAT_STEP, NORWAY_BOUNDS.north), Math.min(lon + GRID_LON_STEP, NORWAY_BOUNDS.east)],
-        ],
-        {
-          pane: "darknessPane",
-          renderer: darknessRenderer,
-          stroke: false,
-          fillColor: "#05070b",
-          fillOpacity: 0,
-          interactive: false,
+  polygons.forEach((polygon) => {
+    polygon.forEach((ring) => {
+      ring.forEach((coord, index) => {
+        const point = map.latLngToContainerPoint([coord[1], coord[0]]);
+        if (index === 0) {
+          ctx.moveTo(point.x, point.y);
+        } else {
+          ctx.lineTo(point.x, point.y);
         }
-      ).addTo(darknessLayer);
-
-      const frontRect = L.rectangle(
-        [
-          [lat, lon],
-          [Math.min(lat + GRID_LAT_STEP, NORWAY_BOUNDS.north), Math.min(lon + GRID_LON_STEP, NORWAY_BOUNDS.east)],
-        ],
-        {
-          pane: "frontPane",
-          renderer: frontRenderer,
-          stroke: false,
-          fillColor: "#f5c46e",
-          fillOpacity: 0,
-          interactive: false,
-        }
-      ).addTo(frontLayer);
-
-      darknessCells.push({
-        lat: lat + GRID_LAT_STEP / 2,
-        lon: lon + GRID_LON_STEP / 2,
-        rect,
-        frontRect,
       });
+      ctx.closePath();
+    });
+  });
+}
+
+function buildLowResOverlay(date, width, height) {
+  const sampleWidth = Math.max(180, Math.round(width / 4));
+  const sampleHeight = Math.max(220, Math.round(height / 4));
+  const offscreen = document.createElement("canvas");
+  offscreen.width = sampleWidth;
+  offscreen.height = sampleHeight;
+  const offCtx = offscreen.getContext("2d");
+
+  for (let y = 0; y < sampleHeight; y += 1) {
+    for (let x = 0; x < sampleWidth; x += 1) {
+      const px = ((x + 0.5) / sampleWidth) * width;
+      const py = ((y + 0.5) / sampleHeight) * height;
+      const latLng = map.containerPointToLatLng([px, py]);
+      const altitude = sunAltitudeDeg(date, latLng.lat, latLng.lng);
+      const darkOpacity = darknessOpacityForAltitude(altitude);
+      const frontOpacity = frontOpacityForAltitude(altitude);
+
+      if (darkOpacity > 0.002) {
+        offCtx.fillStyle = `rgba(5, 7, 11, ${darkOpacity.toFixed(3)})`;
+        offCtx.fillRect(x, y, 1, 1);
+      }
+      if (frontOpacity > 0.002) {
+        offCtx.fillStyle = `rgba(245, 196, 110, ${frontOpacity.toFixed(3)})`;
+        offCtx.fillRect(x, y, 1, 1);
+      }
     }
   }
+
+  return offscreen;
 }
 
 function drawDarknessOverlay(date) {
-  darknessCells.forEach((cell) => {
-    const altitude = sunAltitudeDeg(date, cell.lat, cell.lon);
-    const opacity = darknessOpacityForAltitude(altitude);
-    const frontOpacity = frontOpacityForAltitude(altitude);
-    cell.rect.setStyle({
-      fillOpacity: opacity,
-    });
-    cell.frontRect.setStyle({
-      fillOpacity: frontOpacity,
-    });
-  });
+  const { ctx, width, height } = resizeOverlayCanvas();
+  ctx.clearRect(0, 0, width, height);
+
+  const fieldCanvas = buildLowResOverlay(date, width, height);
+
+  ctx.save();
+  if (bufferedNorway) {
+    ctx.beginPath();
+    drawFeaturePath(ctx, bufferedNorway);
+    ctx.clip("evenodd");
+  }
+  ctx.imageSmoothingEnabled = true;
+  ctx.filter = "blur(8px)";
+  ctx.drawImage(fieldCanvas, 0, 0, width, height);
+  ctx.filter = "none";
+  ctx.restore();
 }
 
 function formatTimeLabel(date) {
@@ -321,11 +326,14 @@ timeRange.addEventListener("input", (event) => {
 
 renderAtSelectedTime();
 
+map.on("moveend zoomend resize", () => {
+  renderAtSelectedTime();
+});
+
 fetch("./data/norway.geojson")
   .then((response) => response.json())
   .then((geojson) => {
     bufferedNorway = turf.buffer(geojson.features[0], COAST_BUFFER_KM, { units: "kilometers" });
-    buildDarknessGrid();
     renderAtSelectedTime();
   })
   .catch(() => {
