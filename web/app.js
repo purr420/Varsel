@@ -166,11 +166,7 @@ legend.onAdd = function () {
 legend.addTo(map);
 
 let bufferedNorway = null;
-const overlayCanvas = L.DomUtil.create("canvas", "daylight-overlay", map.getPane("frontPane"));
-overlayCanvas.style.position = "absolute";
-overlayCanvas.style.top = "0";
-overlayCanvas.style.left = "0";
-overlayCanvas.style.pointerEvents = "none";
+let daylightOverlay = null;
 
 function smoothstep(edge0, edge1, value) {
   const x = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
@@ -192,16 +188,10 @@ function darknessOpacityForAltitude(altitude) {
   return 0;
 }
 
-function resizeOverlayCanvas() {
-  const size = map.getSize();
-  const dpr = window.devicePixelRatio || 1;
-  overlayCanvas.width = Math.round(size.x * dpr);
-  overlayCanvas.height = Math.round(size.y * dpr);
-  overlayCanvas.style.width = `${size.x}px`;
-  overlayCanvas.style.height = `${size.y}px`;
-  const ctx = overlayCanvas.getContext("2d");
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  return { ctx, width: size.x, height: size.y };
+function geoToCanvasPoint(lat, lon, width, height) {
+  const x = ((lon - NORWAY_BOUNDS.west) / (NORWAY_BOUNDS.east - NORWAY_BOUNDS.west)) * width;
+  const y = ((NORWAY_BOUNDS.north - lat) / (NORWAY_BOUNDS.north - NORWAY_BOUNDS.south)) * height;
+  return [x, y];
 }
 
 function drawFeaturePath(ctx, feature) {
@@ -212,11 +202,11 @@ function drawFeaturePath(ctx, feature) {
   polygons.forEach((polygon) => {
     polygon.forEach((ring) => {
       ring.forEach((coord, index) => {
-        const point = map.latLngToContainerPoint([coord[1], coord[0]]);
+        const point = geoToCanvasPoint(coord[1], coord[0], ctx.canvas.width, ctx.canvas.height);
         if (index === 0) {
-          ctx.moveTo(point.x, point.y);
+          ctx.moveTo(point[0], point[1]);
         } else {
-          ctx.lineTo(point.x, point.y);
+          ctx.lineTo(point[0], point[1]);
         }
       });
       ctx.closePath();
@@ -225,8 +215,8 @@ function drawFeaturePath(ctx, feature) {
 }
 
 function buildLowResOverlay(date, width, height) {
-  const sampleWidth = Math.max(320, Math.round(width / 2));
-  const sampleHeight = Math.max(360, Math.round(height / 2));
+  const sampleWidth = Math.max(360, Math.round(width / 2));
+  const sampleHeight = Math.max(300, Math.round(height / 2));
   const offscreen = document.createElement("canvas");
   offscreen.width = sampleWidth;
   offscreen.height = sampleHeight;
@@ -234,10 +224,9 @@ function buildLowResOverlay(date, width, height) {
 
   for (let y = 0; y < sampleHeight; y += 1) {
     for (let x = 0; x < sampleWidth; x += 1) {
-      const px = ((x + 0.5) / sampleWidth) * width;
-      const py = ((y + 0.5) / sampleHeight) * height;
-      const latLng = map.containerPointToLatLng([px, py]);
-      const altitude = sunAltitudeDeg(date, latLng.lat, latLng.lng);
+      const lon = NORWAY_BOUNDS.west + ((x + 0.5) / sampleWidth) * (NORWAY_BOUNDS.east - NORWAY_BOUNDS.west);
+      const lat = NORWAY_BOUNDS.north - ((y + 0.5) / sampleHeight) * (NORWAY_BOUNDS.north - NORWAY_BOUNDS.south);
+      const altitude = sunAltitudeDeg(date, lat, lon);
       const darkOpacity = darknessOpacityForAltitude(altitude);
 
       if (darkOpacity > 0.002) {
@@ -251,11 +240,15 @@ function buildLowResOverlay(date, width, height) {
 }
 
 function drawDarknessOverlay(date) {
-  const { ctx, width, height } = resizeOverlayCanvas();
-  ctx.clearRect(0, 0, width, height);
-
+  const width = 960;
+  const height = 700;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
   const fieldCanvas = buildLowResOverlay(date, width, height);
 
+  ctx.clearRect(0, 0, width, height);
   ctx.save();
   if (bufferedNorway) {
     ctx.beginPath();
@@ -263,10 +256,26 @@ function drawDarknessOverlay(date) {
     ctx.clip("evenodd");
   }
   ctx.imageSmoothingEnabled = true;
-  ctx.filter = "blur(3px)";
+  ctx.filter = "blur(2px)";
   ctx.drawImage(fieldCanvas, 0, 0, width, height);
   ctx.filter = "none";
   ctx.restore();
+
+  const url = canvas.toDataURL("image/png");
+  const bounds = [
+    [NORWAY_BOUNDS.south, NORWAY_BOUNDS.west],
+    [NORWAY_BOUNDS.north, NORWAY_BOUNDS.east],
+  ];
+
+  if (!daylightOverlay) {
+    daylightOverlay = L.imageOverlay(url, bounds, {
+      pane: "frontPane",
+      interactive: false,
+      opacity: 1,
+    }).addTo(map);
+  } else {
+    daylightOverlay.setUrl(url);
+  }
 }
 
 function formatTimeLabel(date) {
@@ -309,10 +318,6 @@ timeRange.addEventListener("input", (event) => {
 });
 
 renderAtSelectedTime();
-
-map.on("moveend zoomend resize", () => {
-  renderAtSelectedTime();
-});
 
 fetch("./data/norway.geojson")
   .then((response) => response.json())
