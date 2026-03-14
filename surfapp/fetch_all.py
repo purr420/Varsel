@@ -1095,16 +1095,23 @@ def fetch_lindesnes_fyr() -> list[dict]:
         if m:
             sea_temp_c = float(m.group(1).replace(",", "."))
 
-    # Forsøk å hente dato fra tekstinnholdet (samme som det opprinnelige skriptet gjorde)
+    # Hent publisert dato/klokkeslett fra tekstinnholdet på siden.
     all_text = soup.get_text(separator="\n", strip=True)
+    date_time_match = re.search(
+        r"(\d{1,2})\.\s*([A-Za-zæøåÆØÅ]+)\s*(\d{4})\s*kl\.\s*(\d{1,2}):(\d{2})",
+        all_text,
+    )
     date_match = re.search(r"(\d{1,2})\.\s*([A-Za-zæøåÆØÅ]+)\s*(\d{4})", all_text)
     obs_dt_oslo = datetime.now(OSLO_TZ)
     obs_date_label = None
 
-    if date_match:
-        day = int(date_match.group(1))
-        month_name = date_match.group(2).lower()
-        year = int(date_match.group(3))
+    matched = date_time_match or date_match
+    if matched:
+        day = int(matched.group(1))
+        month_name = matched.group(2).lower()
+        year = int(matched.group(3))
+        hour = int(date_time_match.group(4)) if date_time_match else 0
+        minute = int(date_time_match.group(5)) if date_time_match else 0
 
         month_map = {
             "januar": (1, "jan."),
@@ -1124,7 +1131,7 @@ def fetch_lindesnes_fyr() -> list[dict]:
         month_info = month_map.get(month_name)
         if month_info:
             month, month_short = month_info
-            local_dt = datetime(year, month, day)
+            local_dt = datetime(year, month, day, hour, minute)
             obs_dt_oslo = OSLO_TZ.localize(local_dt)
             obs_date_label = f"{day}.{month_short}"
 

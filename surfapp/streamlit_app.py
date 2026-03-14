@@ -593,6 +593,7 @@ MODEL_METADATA = {
     "noaa": read_metadata_from_cache("noaa_lista_cache.csv") or {},
     "surfline": read_metadata_from_cache("surfline_lista_cache.csv") or {},
     "observasjoner_lista": read_metadata_from_cache("observasjoner_lista_cache.csv") or {},
+    "tide_lista": read_metadata_from_cache("tides_norway_spots_cache.csv") or {},
 }
 
 
@@ -642,6 +643,20 @@ def format_surfline_metadata(meta: dict) -> Optional[str]:
     if not run_display:
         return None
     return f"Surfline: Run (UTC) {run_display}"
+
+
+def latest_available_update_time() -> Optional[datetime]:
+    candidates: list[datetime] = []
+    if LAST_FETCH_UTC:
+        candidates.append(LAST_FETCH_UTC)
+
+    for meta in MODEL_METADATA.values():
+        for key in ("created", "model_run"):
+            value = meta.get(key)
+            if isinstance(value, datetime):
+                candidates.append(value.astimezone(UTC))
+
+    return max(candidates) if candidates else None
 
 
 YR_DATA = load_cache_by_hour("yr_lista_cache.csv")
@@ -878,8 +893,9 @@ MONTHS_EN = [
     "Dec",
 ]
 month_no = MONTHS_NO[now_oslo.month - 1]
-if LAST_FETCH_UTC:
-    last_fetch_oslo = LAST_FETCH_UTC.astimezone(OSLO_TZ)
+latest_update_utc = latest_available_update_time()
+if latest_update_utc:
+    last_fetch_oslo = latest_update_utc.astimezone(OSLO_TZ)
     header_updated_text = (
         f"(oppdatert {last_fetch_oslo.strftime('%H:%M %d.')} "
         f"{MONTHS_NO[last_fetch_oslo.month - 1]})"
