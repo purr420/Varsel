@@ -157,9 +157,8 @@ legend.onAdd = function () {
   const div = L.DomUtil.create("div", "legend");
   div.innerHTML =
     '<div class="title">Lys Over Norge</div>' +
-    '<div class="row"><span class="swatch" style="background:rgba(0,0,0,0.50)"></span> Morkt</div>' +
+    '<div class="row"><span class="swatch" style="background:rgba(0,0,0,0.60)"></span> Morkt</div>' +
     '<div class="row"><span class="swatch" style="background:rgba(0,0,0,0.20)"></span> Civilt lys</div>' +
-    '<div class="row"><span class="swatch" style="background:rgba(245,196,110,0.50)"></span> Lysfront</div>' +
     '<div class="row"><span class="swatch" style="background:rgba(255,255,255,0.95)"></span> Etter soloppgang</div>' +
     '<div class="row"><span class="swatch" style="background:#60a5fa"></span> Spot</div>';
   return div;
@@ -179,28 +178,18 @@ function smoothstep(edge0, edge1, value) {
 }
 
 function darknessOpacityForAltitude(altitude) {
-  if (altitude <= -12) {
-    return 0.56;
+  if (altitude <= -6) {
+    return 0.6;
   }
-  if (altitude < -6) {
-    const t = smoothstep(-12, -6, altitude);
-    return 0.56 + (0.24 - 0.56) * t;
+  if (altitude < -0.8) {
+    const t = smoothstep(-6, -0.8, altitude);
+    return 0.6 + (0.2 - 0.6) * t;
   }
-  if (altitude < 2) {
-    const t = smoothstep(-6, 2, altitude);
-    return 0.24 * (1 - t);
+  if (altitude < 0.35) {
+    const t = smoothstep(-0.8, 0.35, altitude);
+    return 0.2 * (1 - t);
   }
   return 0;
-}
-
-function frontOpacityForAltitude(altitude) {
-  if (altitude <= -4 || altitude >= 2) {
-    return 0;
-  }
-  if (altitude < -1) {
-    return 0.08 + 0.22 * smoothstep(-4, -1, altitude);
-  }
-  return 0.3 * (1 - smoothstep(-1, 2, altitude));
 }
 
 function resizeOverlayCanvas() {
@@ -236,8 +225,8 @@ function drawFeaturePath(ctx, feature) {
 }
 
 function buildLowResOverlay(date, width, height) {
-  const sampleWidth = Math.max(180, Math.round(width / 4));
-  const sampleHeight = Math.max(220, Math.round(height / 4));
+  const sampleWidth = Math.max(320, Math.round(width / 2));
+  const sampleHeight = Math.max(360, Math.round(height / 2));
   const offscreen = document.createElement("canvas");
   offscreen.width = sampleWidth;
   offscreen.height = sampleHeight;
@@ -250,14 +239,9 @@ function buildLowResOverlay(date, width, height) {
       const latLng = map.containerPointToLatLng([px, py]);
       const altitude = sunAltitudeDeg(date, latLng.lat, latLng.lng);
       const darkOpacity = darknessOpacityForAltitude(altitude);
-      const frontOpacity = frontOpacityForAltitude(altitude);
 
       if (darkOpacity > 0.002) {
         offCtx.fillStyle = `rgba(5, 7, 11, ${darkOpacity.toFixed(3)})`;
-        offCtx.fillRect(x, y, 1, 1);
-      }
-      if (frontOpacity > 0.002) {
-        offCtx.fillStyle = `rgba(245, 196, 110, ${frontOpacity.toFixed(3)})`;
         offCtx.fillRect(x, y, 1, 1);
       }
     }
@@ -279,7 +263,7 @@ function drawDarknessOverlay(date) {
     ctx.clip("evenodd");
   }
   ctx.imageSmoothingEnabled = true;
-  ctx.filter = "blur(8px)";
+  ctx.filter = "blur(3px)";
   ctx.drawImage(fieldCanvas, 0, 0, width, height);
   ctx.filter = "none";
   ctx.restore();
