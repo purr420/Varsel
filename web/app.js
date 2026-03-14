@@ -6,9 +6,9 @@ const NORWAY_BOUNDS = {
   north: 71.55,
   east: 32.2,
 };
-const OVERLAY_SIZE = { width: 1200, height: 900 };
-const LOW_RES_SIZE = { cols: 300, rows: 225 };
 const COAST_BUFFER_KM = 100;
+const GRID_LAT_STEP = 0.18;
+const GRID_LON_STEP = 0.27;
 
 const map = L.map("map", {
   zoomControl: true,
@@ -23,9 +23,16 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 map.createPane("darknessPane");
 map.getPane("darknessPane").style.zIndex = 320;
 map.getPane("darknessPane").style.pointerEvents = "none";
+map.getPane("darknessPane").style.mixBlendMode = "multiply";
+
+map.createPane("frontPane");
+map.getPane("frontPane").style.zIndex = 330;
+map.getPane("frontPane").style.pointerEvents = "none";
 
 const spotLayer = L.featureGroup().addTo(map);
 const spotMarkers = [];
+const darknessRenderer = L.canvas({ pane: "darknessPane" });
+const frontRenderer = L.canvas({ pane: "frontPane" });
 
 const osloPartsFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: OSLO_TIMEZONE,
@@ -161,14 +168,17 @@ legend.onAdd = function () {
     '<div class="title">Lys Over Norge</div>' +
     '<div class="row"><span class="swatch" style="background:rgba(0,0,0,0.50)"></span> Morkt</div>' +
     '<div class="row"><span class="swatch" style="background:rgba(0,0,0,0.20)"></span> Civilt lys</div>' +
+    '<div class="row"><span class="swatch" style="background:rgba(245,196,110,0.50)"></span> Lysfront</div>' +
     '<div class="row"><span class="swatch" style="background:rgba(255,255,255,0.95)"></span> Etter soloppgang</div>' +
     '<div class="row"><span class="swatch" style="background:#60a5fa"></span> Spot</div>';
   return div;
 };
 legend.addTo(map);
 
-let darknessOverlay = null;
-let norwayBoundary = null;
+let bufferedNorway = null;
+const darknessLayer = L.layerGroup().addTo(map);
+const frontLayer = L.layerGroup().addTo(map);
+const darknessCells = [];
 
 function smoothstep(edge0, edge1, value) {
   const x = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
@@ -176,127 +186,98 @@ function smoothstep(edge0, edge1, value) {
 }
 
 function darknessOpacityForAltitude(altitude) {
-  if (altitude <= -10) {
-    return 0.5;
+  if (altitude <= -12) {
+    return 0.56;
   }
   if (altitude < -6) {
-    const t = smoothstep(-10, -6, altitude);
-    return 0.5 + (0.2 - 0.5) * t;
+    const t = smoothstep(-12, -6, altitude);
+    return 0.56 + (0.24 - 0.56) * t;
   }
-  if (altitude < 1) {
-    const t = smoothstep(-6, 1, altitude);
-    return 0.2 * (1 - t);
+  if (altitude < 2) {
+    const t = smoothstep(-6, 2, altitude);
+    return 0.24 * (1 - t);
   }
   return 0;
 }
 
-function projectToCanvas(lat, lon, width, height) {
-  const x = ((lon - NORWAY_BOUNDS.west) / (NORWAY_BOUNDS.east - NORWAY_BOUNDS.west)) * width;
-  const y = ((NORWAY_BOUNDS.north - lat) / (NORWAY_BOUNDS.north - NORWAY_BOUNDS.south)) * height;
-  return [x, y];
-}
-
-function drawRingPath(ctx, ring, width, height) {
-  ring.forEach((coord, index) => {
-    const [x, y] = projectToCanvas(coord[1], coord[0], width, height);
-    if (index === 0) {
-      ctx.moveTo(x, y);
-    } else {
-      ctx.lineTo(x, y);
-    }
-  });
-  ctx.closePath();
-}
-
-function buildNorwayMaskCanvas(width, height) {
-  const maskCanvas = document.createElement("canvas");
-  maskCanvas.width = width;
-  maskCanvas.height = height;
-  const maskCtx = maskCanvas.getContext("2d");
-
-  if (!norwayBoundary) {
-    return maskCanvas;
+function frontOpacityForAltitude(altitude) {
+  if (altitude <= -4 || altitude >= 2) {
+    return 0;
   }
-
-  const bufferPx = (height / ((NORWAY_BOUNDS.north - NORWAY_BOUNDS.south) * 111)) * COAST_BUFFER_KM;
-  maskCtx.fillStyle = "#ffffff";
-  maskCtx.strokeStyle = "#ffffff";
-  maskCtx.lineJoin = "round";
-  maskCtx.lineCap = "round";
-  maskCtx.lineWidth = bufferPx * 2;
-
-  norwayBoundary.features.forEach((feature) => {
-    const polygons = feature.geometry.type === "Polygon"
-      ? [feature.geometry.coordinates]
-      : feature.geometry.coordinates;
-
-    polygons.forEach((polygon) => {
-      maskCtx.beginPath();
-      polygon.forEach((ring) => {
-        drawRingPath(maskCtx, ring, width, height);
-      });
-      maskCtx.fill("evenodd");
-      maskCtx.stroke();
-    });
-  });
-
-  return maskCanvas;
+  if (altitude < -1) {
+    return 0.08 + 0.22 * smoothstep(-4, -1, altitude);
+  }
+  return 0.3 * (1 - smoothstep(-1, 2, altitude));
 }
 
-function drawDarknessOverlay(date) {
-  const lowCanvas = document.createElement("canvas");
-  lowCanvas.width = LOW_RES_SIZE.cols;
-  lowCanvas.height = LOW_RES_SIZE.rows;
+function buildDarknessGrid() {
+  darknessLayer.clearLayers();
+  frontLayer.clearLayers();
+  darknessCells.length = 0;
 
-  const lowCtx = lowCanvas.getContext("2d");
-  const cellWidth = lowCanvas.width / LOW_RES_SIZE.cols;
-  const cellHeight = lowCanvas.height / LOW_RES_SIZE.rows;
-  const latSpan = NORWAY_BOUNDS.north - NORWAY_BOUNDS.south;
-  const lonSpan = NORWAY_BOUNDS.east - NORWAY_BOUNDS.west;
-
-  for (let y = 0; y < LOW_RES_SIZE.rows; y += 1) {
-    const lat = NORWAY_BOUNDS.north - ((y + 0.5) / LOW_RES_SIZE.rows) * latSpan;
-    for (let x = 0; x < LOW_RES_SIZE.cols; x += 1) {
-      const lon = NORWAY_BOUNDS.west + ((x + 0.5) / LOW_RES_SIZE.cols) * lonSpan;
-      const opacity = darknessOpacityForAltitude(sunAltitudeDeg(date, lat, lon));
-      if (opacity <= 0.002) {
-        continue;
-      }
-      lowCtx.fillStyle = `rgba(0, 0, 0, ${opacity.toFixed(3)})`;
-      lowCtx.fillRect(x * cellWidth, y * cellHeight, cellWidth + 1, cellHeight + 1);
-    }
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = OVERLAY_SIZE.width;
-  canvas.height = OVERLAY_SIZE.height;
-  const ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = true;
-  ctx.filter = "blur(10px)";
-  ctx.drawImage(lowCanvas, 0, 0, canvas.width, canvas.height);
-  ctx.filter = "none";
-
-  const maskCanvas = buildNorwayMaskCanvas(canvas.width, canvas.height);
-  ctx.globalCompositeOperation = "destination-in";
-  ctx.drawImage(maskCanvas, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-
-  const imageUrl = canvas.toDataURL("image/png");
-  const bounds = [
-    [NORWAY_BOUNDS.south, NORWAY_BOUNDS.west],
-    [NORWAY_BOUNDS.north, NORWAY_BOUNDS.east],
-  ];
-
-  if (!darknessOverlay) {
-    darknessOverlay = L.imageOverlay(imageUrl, bounds, {
-      pane: "darknessPane",
-      interactive: false,
-      opacity: 1,
-    }).addTo(map);
+  if (!bufferedNorway) {
     return;
   }
 
-  darknessOverlay.setUrl(imageUrl);
+  for (let lat = NORWAY_BOUNDS.south; lat < NORWAY_BOUNDS.north; lat += GRID_LAT_STEP) {
+    for (let lon = NORWAY_BOUNDS.west; lon < NORWAY_BOUNDS.east; lon += GRID_LON_STEP) {
+      const center = turf.point([lon + GRID_LON_STEP / 2, lat + GRID_LAT_STEP / 2]);
+      if (!turf.booleanPointInPolygon(center, bufferedNorway)) {
+        continue;
+      }
+
+      const rect = L.rectangle(
+        [
+          [lat, lon],
+          [Math.min(lat + GRID_LAT_STEP, NORWAY_BOUNDS.north), Math.min(lon + GRID_LON_STEP, NORWAY_BOUNDS.east)],
+        ],
+        {
+          pane: "darknessPane",
+          renderer: darknessRenderer,
+          stroke: false,
+          fillColor: "#05070b",
+          fillOpacity: 0,
+          interactive: false,
+        }
+      ).addTo(darknessLayer);
+
+      const frontRect = L.rectangle(
+        [
+          [lat, lon],
+          [Math.min(lat + GRID_LAT_STEP, NORWAY_BOUNDS.north), Math.min(lon + GRID_LON_STEP, NORWAY_BOUNDS.east)],
+        ],
+        {
+          pane: "frontPane",
+          renderer: frontRenderer,
+          stroke: false,
+          fillColor: "#f5c46e",
+          fillOpacity: 0,
+          interactive: false,
+        }
+      ).addTo(frontLayer);
+
+      darknessCells.push({
+        lat: lat + GRID_LAT_STEP / 2,
+        lon: lon + GRID_LON_STEP / 2,
+        rect,
+        frontRect,
+      });
+    }
+  }
+}
+
+function drawDarknessOverlay(date) {
+  darknessCells.forEach((cell) => {
+    const altitude = sunAltitudeDeg(date, cell.lat, cell.lon);
+    const opacity = darknessOpacityForAltitude(altitude);
+    const frontOpacity = frontOpacityForAltitude(altitude);
+    cell.rect.setStyle({
+      fillOpacity: opacity,
+    });
+    cell.frontRect.setStyle({
+      fillOpacity: frontOpacity,
+    });
+  });
 }
 
 function formatTimeLabel(date) {
@@ -343,7 +324,8 @@ renderAtSelectedTime();
 fetch("./data/norway.geojson")
   .then((response) => response.json())
   .then((geojson) => {
-    norwayBoundary = geojson;
+    bufferedNorway = turf.buffer(geojson.features[0], COAST_BUFFER_KM, { units: "kilometers" });
+    buildDarknessGrid();
     renderAtSelectedTime();
   })
   .catch(() => {
