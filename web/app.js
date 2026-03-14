@@ -6,6 +6,9 @@ const NORWAY_BOUNDS = {
   north: 71.55,
   east: 32.2,
 };
+const OVERLAY_SIZE = { width: 1200, height: 900 };
+const LOW_RES_SIZE = { cols: 300, rows: 225 };
+const COAST_BUFFER_KM = 100;
 
 const map = L.map("map", {
   zoomControl: true,
@@ -165,32 +168,118 @@ legend.onAdd = function () {
 legend.addTo(map);
 
 let darknessOverlay = null;
+let norwayBoundary = null;
+
+function smoothstep(edge0, edge1, value) {
+  const x = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+  return x * x * (3 - 2 * x);
+}
+
+function darknessOpacityForAltitude(altitude) {
+  if (altitude <= -10) {
+    return 0.5;
+  }
+  if (altitude < -6) {
+    const t = smoothstep(-10, -6, altitude);
+    return 0.5 + (0.2 - 0.5) * t;
+  }
+  if (altitude < 1) {
+    const t = smoothstep(-6, 1, altitude);
+    return 0.2 * (1 - t);
+  }
+  return 0;
+}
+
+function projectToCanvas(lat, lon, width, height) {
+  const x = ((lon - NORWAY_BOUNDS.west) / (NORWAY_BOUNDS.east - NORWAY_BOUNDS.west)) * width;
+  const y = ((NORWAY_BOUNDS.north - lat) / (NORWAY_BOUNDS.north - NORWAY_BOUNDS.south)) * height;
+  return [x, y];
+}
+
+function drawRingPath(ctx, ring, width, height) {
+  ring.forEach((coord, index) => {
+    const [x, y] = projectToCanvas(coord[1], coord[0], width, height);
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.closePath();
+}
+
+function buildNorwayMaskCanvas(width, height) {
+  const maskCanvas = document.createElement("canvas");
+  maskCanvas.width = width;
+  maskCanvas.height = height;
+  const maskCtx = maskCanvas.getContext("2d");
+
+  if (!norwayBoundary) {
+    return maskCanvas;
+  }
+
+  const bufferPx = (height / ((NORWAY_BOUNDS.north - NORWAY_BOUNDS.south) * 111)) * COAST_BUFFER_KM;
+  maskCtx.fillStyle = "#ffffff";
+  maskCtx.strokeStyle = "#ffffff";
+  maskCtx.lineJoin = "round";
+  maskCtx.lineCap = "round";
+  maskCtx.lineWidth = bufferPx * 2;
+
+  norwayBoundary.features.forEach((feature) => {
+    const polygons = feature.geometry.type === "Polygon"
+      ? [feature.geometry.coordinates]
+      : feature.geometry.coordinates;
+
+    polygons.forEach((polygon) => {
+      maskCtx.beginPath();
+      polygon.forEach((ring) => {
+        drawRingPath(maskCtx, ring, width, height);
+      });
+      maskCtx.fill("evenodd");
+      maskCtx.stroke();
+    });
+  });
+
+  return maskCanvas;
+}
 
 function drawDarknessOverlay(date) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 720;
-  canvas.height = 540;
+  const lowCanvas = document.createElement("canvas");
+  lowCanvas.width = LOW_RES_SIZE.cols;
+  lowCanvas.height = LOW_RES_SIZE.rows;
 
-  const ctx = canvas.getContext("2d");
-  const cols = 180;
-  const rows = 135;
-  const cellWidth = canvas.width / cols;
-  const cellHeight = canvas.height / rows;
+  const lowCtx = lowCanvas.getContext("2d");
+  const cellWidth = lowCanvas.width / LOW_RES_SIZE.cols;
+  const cellHeight = lowCanvas.height / LOW_RES_SIZE.rows;
   const latSpan = NORWAY_BOUNDS.north - NORWAY_BOUNDS.south;
   const lonSpan = NORWAY_BOUNDS.east - NORWAY_BOUNDS.west;
 
-  for (let y = 0; y < rows; y += 1) {
-    const lat = NORWAY_BOUNDS.north - ((y + 0.5) / rows) * latSpan;
-    for (let x = 0; x < cols; x += 1) {
-      const lon = NORWAY_BOUNDS.west + ((x + 0.5) / cols) * lonSpan;
-      const state = lightState(date, lat, lon);
-      if (state.opacity <= 0) {
+  for (let y = 0; y < LOW_RES_SIZE.rows; y += 1) {
+    const lat = NORWAY_BOUNDS.north - ((y + 0.5) / LOW_RES_SIZE.rows) * latSpan;
+    for (let x = 0; x < LOW_RES_SIZE.cols; x += 1) {
+      const lon = NORWAY_BOUNDS.west + ((x + 0.5) / LOW_RES_SIZE.cols) * lonSpan;
+      const opacity = darknessOpacityForAltitude(sunAltitudeDeg(date, lat, lon));
+      if (opacity <= 0.002) {
         continue;
       }
-      ctx.fillStyle = state.key === "dark" ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.2)";
-      ctx.fillRect(x * cellWidth, y * cellHeight, cellWidth + 1, cellHeight + 1);
+      lowCtx.fillStyle = `rgba(0, 0, 0, ${opacity.toFixed(3)})`;
+      lowCtx.fillRect(x * cellWidth, y * cellHeight, cellWidth + 1, cellHeight + 1);
     }
   }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = OVERLAY_SIZE.width;
+  canvas.height = OVERLAY_SIZE.height;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.filter = "blur(10px)";
+  ctx.drawImage(lowCanvas, 0, 0, canvas.width, canvas.height);
+  ctx.filter = "none";
+
+  const maskCanvas = buildNorwayMaskCanvas(canvas.width, canvas.height);
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.drawImage(maskCanvas, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
 
   const imageUrl = canvas.toDataURL("image/png");
   const bounds = [
@@ -250,3 +339,13 @@ timeRange.addEventListener("input", (event) => {
 });
 
 renderAtSelectedTime();
+
+fetch("./data/norway.geojson")
+  .then((response) => response.json())
+  .then((geojson) => {
+    norwayBoundary = geojson;
+    renderAtSelectedTime();
+  })
+  .catch(() => {
+    renderAtSelectedTime();
+  });
