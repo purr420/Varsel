@@ -405,7 +405,7 @@ def fetch_met_weathercorrection(harbor_slug: str) -> tuple[Optional[datetime], d
 
     for line in resp.text.splitlines():
         parts = line.split()
-        if len(parts) < 8 or not parts[0].isdigit():
+        if len(parts) < 13 or not parts[0].isdigit():
             continue
         year, month, day, hour, minute = (int(parts[i]) for i in range(5))
         if minute != 0:
@@ -415,6 +415,11 @@ def fetch_met_weathercorrection(harbor_slug: str) -> tuple[Optional[datetime], d
             "surge_m": float(parts[5]),
             "met_tide_m": float(parts[6]),
             "total_m": float(parts[7]),
+            "surge_p0_m": float(parts[8]),
+            "surge_p25_m": float(parts[9]),
+            "surge_p50_m": float(parts[10]),
+            "surge_p75_m": float(parts[11]),
+            "surge_p100_m": float(parts[12]),
         }
     return updated_at, rows
 
@@ -475,6 +480,11 @@ def write_tide_rows(
                 "dmi_dkss_m",
                 "met_tide_m",
                 "total_water_level_m",
+                "surge_p0_m",
+                "surge_p25_m",
+                "surge_p50_m",
+                "surge_p75_m",
+                "surge_p100_m",
             ]
         )
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -547,6 +557,21 @@ def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict], dict[str, dat
                     ),
                     "total_water_level_m": (
                         f"{corrected_row['total_m']:.3f}" if "total_m" in corrected_row else ""
+                    ),
+                    "surge_p0_m": (
+                        f"{corrected_row['surge_p0_m']:.3f}" if "surge_p0_m" in corrected_row else ""
+                    ),
+                    "surge_p25_m": (
+                        f"{corrected_row['surge_p25_m']:.3f}" if "surge_p25_m" in corrected_row else ""
+                    ),
+                    "surge_p50_m": (
+                        f"{corrected_row['surge_p50_m']:.3f}" if "surge_p50_m" in corrected_row else ""
+                    ),
+                    "surge_p75_m": (
+                        f"{corrected_row['surge_p75_m']:.3f}" if "surge_p75_m" in corrected_row else ""
+                    ),
+                    "surge_p100_m": (
+                        f"{corrected_row['surge_p100_m']:.3f}" if "surge_p100_m" in corrected_row else ""
                     ),
                 }
             )

@@ -1,4 +1,5 @@
 import os
+import html as html_lib
 import streamlit as st
 from datetime import datetime, timedelta, date
 from typing import Optional
@@ -26,6 +27,7 @@ DATA_CACHE_DIR = os.path.join(BASE_DIR, "data_cache")
 DATA_PUBLIC_DIR = os.path.join(BASE_DIR, "data_public")
 YR_CACHE_PATH = os.path.join(DATA_CACHE_DIR, "yr_lista_cache.csv")
 FETCH_TIMESTAMP_PATH = os.path.join(DATA_CACHE_DIR, "fetch_all_last_run.txt")
+TIDE_STATION_MAP_PATH = os.path.join(DATA_CACHE_DIR, "tide_spot_stations.csv")
 
 
 def ensure_data_cache_dir():
@@ -317,6 +319,22 @@ def load_tide_spot_data(spot_name: str):
                 parsed[key] = try_parse_float(val)
             data[dt_utc] = parsed
     return data
+
+
+def load_tide_station_map(spot_name: str) -> Optional[dict]:
+    if not os.path.exists(TIDE_STATION_MAP_PATH):
+        return None
+
+    try:
+        with open(TIDE_STATION_MAP_PATH, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row.get("spot") == spot_name:
+                    return row
+    except OSError:
+        return None
+
+    return None
 
 
 def deg_to_compass(deg):
@@ -667,6 +685,7 @@ MET_DATA = load_cache_by_hour("met_lista_cache.csv")
 NOAA_DATA = load_noaa_public()
 SURFLINE_DATA = load_cache_by_hour("surfline_lista_cache.csv")
 TIDE_LISTA_DATA = load_tide_spot_data("Lista")
+TIDE_LISTA_INFO = load_tide_station_map("Lista")
 def load_lindesnes_latest():
     path = os.path.join(DATA_CACHE_DIR, "lindesnes_fyr_cache.csv")
     if not os.path.exists(path):
@@ -1590,3 +1609,134 @@ document.addEventListener('DOMContentLoaded', function() {
 """
 
 st.components.v1.html(html, height=780 + 24 * len(footer_lines))
+
+tide_compare_hours = [
+    dt for dt in sorted(TIDE_LISTA_DATA.keys())
+    if dt >= now_utc.replace(minute=0, second=0, microsecond=0)
+][:24]
+if not tide_compare_hours:
+    tide_compare_hours = sorted(TIDE_LISTA_DATA.keys())[:24]
+
+if tide_compare_hours:
+    station_name = (TIDE_LISTA_INFO or {}).get("station_name") or "Tregde"
+    station_code = (TIDE_LISTA_INFO or {}).get("station_code") or "-"
+    station_distance = fmt_decimal((TIDE_LISTA_INFO or {}).get("distance_km"))
+    dkss_distance = fmt_decimal((TIDE_LISTA_INFO or {}).get("dkss_distance_km"))
+
+    info_parts = [
+        f"Stasjon: <b>{html_lib.escape(station_name)}</b> ({html_lib.escape(station_code)})",
+    ]
+    if station_distance != "-":
+        info_parts.append(f"avstand spot/stasjon <b>{station_distance} km</b>")
+    if (
+        TIDE_LISTA_INFO
+        and TIDE_LISTA_INFO.get("dkss_point_lat")
+        and TIDE_LISTA_INFO.get("dkss_point_lon")
+        and dkss_distance != "-"
+    ):
+        info_parts.append(f"DKSS-gridpunkt <b>{dkss_distance} km</b> fra spot")
+
+    compare_html = """
+<style>
+.surge-compare-wrap {
+    margin-top: 26px;
+}
+.surge-compare-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+.surge-compare-sub {
+    font-size: 14px;
+    opacity: 0.8;
+    margin-bottom: 12px;
+}
+.surge-compare-table-wrap {
+    overflow-x: auto;
+    border-radius: 6px;
+    background: #f4f4f4;
+}
+.surge-compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #f7f7f7;
+    font-size: 14px;
+}
+.surge-compare-table th,
+.surge-compare-table td {
+    padding: 8px 10px;
+    border: none;
+    white-space: nowrap;
+}
+.surge-compare-table thead th {
+    background: #ececec;
+    text-align: right;
+    font-weight: 600;
+}
+.surge-compare-table thead th:first-child,
+.surge-compare-table tbody td:first-child {
+    text-align: left;
+}
+.surge-compare-table tbody tr:nth-child(even) td {
+    background: #f2f2f2;
+}
+.surge-compare-note {
+    margin-top: 8px;
+    font-size: 13px;
+    opacity: 0.75;
+}
+</style>
+"""
+    compare_html += '<div class="surge-compare-wrap">'
+    compare_html += '<div class="surge-compare-title">Vannstand og surge neste 24 t</div>'
+    compare_html += f'<div class="surge-compare-sub">{" | ".join(info_parts)}</div>'
+    compare_html += '<div class="surge-compare-table-wrap"><table class="surge-compare-table">'
+    compare_html += """
+<thead>
+<tr>
+    <th>Tid</th>
+    <th>Astro</th>
+    <th>Surge</th>
+    <th>DKSS</th>
+    <th>MET tide</th>
+    <th>Total</th>
+    <th>P0</th>
+    <th>P25</th>
+    <th>P50</th>
+    <th>P75</th>
+    <th>P100</th>
+</tr>
+</thead>
+<tbody>
+"""
+    weekday_short = ["man", "tir", "ons", "tor", "fre", "lor", "son"]
+    for dt_utc in tide_compare_hours:
+        row = TIDE_LISTA_DATA.get(dt_utc, {})
+        dt_local = dt_utc.astimezone(OSLO_TZ)
+        time_label = f"{weekday_short[dt_local.weekday()]} {dt_local.strftime('%H:%M')}"
+        compare_html += (
+            "<tr>"
+            f"<td>{time_label}</td>"
+            f"<td>{fmt_decimal(get_val(row, 'astronomical_tide_m'))}</td>"
+            f"<td>{fmt_decimal(get_val(row, 'surge_m'))}</td>"
+            f"<td>{fmt_decimal(get_val(row, 'dmi_dkss_m'))}</td>"
+            f"<td>{fmt_decimal(get_val(row, 'met_tide_m'))}</td>"
+            f"<td>{fmt_decimal(get_val(row, 'total_water_level_m'))}</td>"
+            f"<td>{fmt_decimal(get_val(row, 'surge_p0_m'))}</td>"
+            f"<td>{fmt_decimal(get_val(row, 'surge_p25_m'))}</td>"
+            f"<td>{fmt_decimal(get_val(row, 'surge_p50_m'))}</td>"
+            f"<td>{fmt_decimal(get_val(row, 'surge_p75_m'))}</td>"
+            f"<td>{fmt_decimal(get_val(row, 'surge_p100_m'))}</td>"
+            "</tr>"
+        )
+
+    compare_html += "</tbody></table></div>"
+    compare_html += (
+        '<div class="surge-compare-note">'
+        "Astro = Kartverket tide. Surge/MET tide/Total/P0-P100 = MET tidalwater. "
+        "DKSS = DMI sea-mean-deviation der den finnes."
+        "</div>"
+    )
+    compare_html += "</div>"
+
+    st.markdown(compare_html, unsafe_allow_html=True)

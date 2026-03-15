@@ -479,6 +479,87 @@ window.MAP_DATA = {
       lon: 4.9868,
       status: "good",
       summary: "Snapshot. Vind, retning og gust svarte med brukbare live-verdier i sjekken min."
+    },
+    {
+      name: "Tregde",
+      provider: "Kartverket/MET vannstand",
+      linkedSpot: "Lista",
+      lat: 58.006377,
+      lon: 7.554759,
+      status: "good",
+      summary: "Naermeste norske vannstandshavn for Lista. Astronomisk tide, surge, total vannstand og ensemble-percentiler via MET tidalwater/sehavniva."
+    },
+    {
+      name: "Lista DKSS gridpunkt",
+      provider: "DMI DKSS",
+      linkedSpot: "Lista",
+      lat: 57.975002,
+      lon: 6.458436,
+      status: "good",
+      summary: "Gridpunkt for DMI sea-mean-deviation ved Lista. Brukes som surge-sammenligning uten tide."
+    },
+    {
+      name: "Sirevag",
+      provider: "Kartverket/MET vannstand",
+      linkedSpot: "Pigsty/Piggy",
+      lat: 58.505200,
+      lon: 5.791602,
+      status: "good",
+      summary: "Naermeste norske vannstandshavn for Pigsty/Piggy. Astronomisk tide, surge, total vannstand og ensemble-percentiler via MET tidalwater/sehavniva."
+    },
+    {
+      name: "Helgeroa",
+      provider: "Kartverket/MET vannstand",
+      linkedSpot: "Saltstein",
+      lat: 58.995212,
+      lon: 9.856379,
+      status: "good",
+      summary: "Naermeste norske vannstandshavn for Saltstein. Astronomisk tide, surge, total vannstand og ensemble-percentiler via MET tidalwater/sehavniva."
+    },
+    {
+      name: "Maloy",
+      provider: "Kartverket/MET vannstand",
+      linkedSpot: "Ervika",
+      lat: 61.933776,
+      lon: 5.113310,
+      status: "good",
+      summary: "Naermeste norske vannstandshavn for Ervika. Astronomisk tide, surge, total vannstand og ensemble-percentiler via MET tidalwater/sehavniva."
+    },
+    {
+      name: "Alesund",
+      provider: "Kartverket/MET vannstand",
+      linkedSpot: "Alnes Lighthouse (Godoy)",
+      lat: 62.469414,
+      lon: 6.151946,
+      status: "good",
+      summary: "Naermeste norske vannstandshavn for Alnes/Godoy. Astronomisk tide, surge, total vannstand og ensemble-percentiler via MET tidalwater/sehavniva."
+    },
+    {
+      name: "Kristiansund",
+      provider: "Kartverket/MET vannstand",
+      linkedSpot: "Hustadvika Gjestegard",
+      lat: 63.113920,
+      lon: 7.736140,
+      status: "good",
+      summary: "Naermeste norske vannstandshavn for Hustadvika. Astronomisk tide, surge, total vannstand og ensemble-percentiler via MET tidalwater/sehavniva."
+    },
+    {
+      name: "Kabelvag",
+      provider: "Kartverket/MET vannstand",
+      linkedSpot: "Unstad Beach",
+      lat: 68.212639,
+      lon: 14.482149,
+      status: "good",
+      summary: "Naermeste norske vannstandshavn for Unstad. Astronomisk tide, surge, total vannstand og ensemble-percentiler via MET tidalwater/sehavniva."
+    },
+    {
+      name: "Vardo",
+      provider: "Kartverket/MET vannstand",
+      linkedSpot: "Persfjord",
+      lat: 70.374978,
+      lon: 31.104015,
+      status: "good",
+      summary: "Naermeste norske vannstandshavn for Persfjord. Astronomisk tide, surge, total vannstand og ensemble-percentiler via MET tidalwater/sehavniva."
     }
   ]
 };
