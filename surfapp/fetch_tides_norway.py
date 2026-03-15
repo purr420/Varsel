@@ -24,6 +24,18 @@ KARTVERKET_STATIONLIST_URL = (
 )
 KARTVERKET_LOCATIONDATA_URL = "https://vannstand.kartverket.no/tideapi.php"
 MET_TIDALWATER_URL = "https://api.met.no/weatherapi/tidalwater/1.1/"
+DMI_DKSS_COLLECTION = "dkss_nsbs"
+DMI_DKSS_POSITION_URL = (
+    f"https://dmigw.govcloud.dk/v1/forecastedr/collections/{DMI_DKSS_COLLECTION}/position"
+)
+DMI_DKSS_CUBE_URL = (
+    f"https://dmigw.govcloud.dk/v1/forecastedr/collections/{DMI_DKSS_COLLECTION}/cube"
+)
+DMI_DKSS_STAC_URL = (
+    f"https://dmigw.govcloud.dk/v1/forecastdata/collections/{DMI_DKSS_COLLECTION}/items"
+)
+DMI_API_KEY_EDR = os.getenv("DMI_API_KEY_EDR", "ae501bfc-112e-400e-89df-77a2a6b9af72")
+DMI_API_KEY_STAC = os.getenv("DMI_API_KEY_STAC", "a4b09032-bca5-4255-ac85-6fea95a1e02c")
 
 STATION_MAP_CACHE = os.path.join(CACHE_DIR, "tide_spot_stations.csv")
 TIDE_CACHE = os.path.join(CACHE_DIR, "tides_norway_spots_cache.csv")
@@ -242,6 +254,144 @@ def parse_met_updated_at(raw: str) -> Optional[datetime]:
     ).replace(tzinfo=UTC)
 
 
+def fetch_dmi_dkss_metadata() -> dict[str, datetime]:
+    params = {"limit": 1, "api-key": DMI_API_KEY_STAC}
+    try:
+        resp = requests.get(
+            DMI_DKSS_STAC_URL,
+            params=params,
+            headers={"User-Agent": USER_AGENT},
+            timeout=25,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException:
+        return {}
+
+    features = data.get("features") or []
+    if not features:
+        return {}
+
+    props = features[0].get("properties", {})
+    meta: dict[str, datetime] = {}
+    model_run = props.get("modelRun")
+    created = props.get("created")
+    if model_run:
+        meta["model_run"] = parse_iso_utc(model_run)
+    if created:
+        meta["created"] = parse_iso_utc(created)
+    return meta
+
+
+def fetch_dmi_dkss_for_spot(
+    spot: Spot,
+) -> tuple[dict[datetime, float], Optional[float], Optional[float], Optional[float]]:
+    base_params = {
+        "coords": f"POINT({spot.lon:.6f} {spot.lat:.6f})",
+        "crs": "crs84",
+        "parameter-name": "sea-mean-deviation",
+        "api-key": DMI_API_KEY_EDR,
+        "f": "GeoJSON",
+    }
+    try:
+        resp = requests.get(
+            DMI_DKSS_POSITION_URL,
+            params=base_params,
+            headers={"User-Agent": USER_AGENT},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError):
+        return {}, None, None, None
+
+    features = data.get("features") or []
+    rows: dict[datetime, float] = {}
+    chosen_lat: Optional[float] = None
+    chosen_lon: Optional[float] = None
+    chosen_distance_km: Optional[float] = None
+
+    for feature in features:
+        geometry = feature.get("geometry") or {}
+        coords = geometry.get("coordinates") or []
+        props = feature.get("properties") or {}
+        value = props.get("sea-mean-deviation")
+        step = props.get("step")
+        if len(coords) >= 2 and chosen_lat is None and chosen_lon is None:
+            chosen_lon = float(coords[0])
+            chosen_lat = float(coords[1])
+            chosen_distance_km = haversine_km(spot.lat, spot.lon, chosen_lat, chosen_lon)
+        if value is None or not step:
+            continue
+        try:
+            rows[parse_iso_utc(step)] = float(value)
+        except (TypeError, ValueError):
+            continue
+
+    if rows:
+        return rows, chosen_lat, chosen_lon, chosen_distance_km
+
+    start_dt = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    end_dt = start_dt + timedelta(days=3)
+    cube_common = {
+        "crs": "crs84",
+        "parameter-name": "sea-mean-deviation",
+        "api-key": DMI_API_KEY_EDR,
+        "f": "GeoJSON",
+        "datetime": f"{start_dt.isoformat()}/{end_dt.isoformat()}",
+    }
+    search_radii_deg = (0.35, 0.7)
+
+    for radius in search_radii_deg:
+        params = dict(cube_common)
+        params["bbox"] = (
+            f"{spot.lon - radius:.6f},{spot.lat - radius:.6f},"
+            f"{spot.lon + radius:.6f},{spot.lat + radius:.6f}"
+        )
+        try:
+            resp = requests.get(
+                DMI_DKSS_CUBE_URL,
+                params=params,
+                headers={"User-Agent": USER_AGENT},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except (requests.RequestException, ValueError):
+            continue
+
+        grouped: dict[tuple[float, float], dict[datetime, float]] = {}
+        for feature in data.get("features") or []:
+            geometry = feature.get("geometry") or {}
+            coords = geometry.get("coordinates") or []
+            props = feature.get("properties") or {}
+            value = props.get("sea-mean-deviation")
+            step = props.get("step")
+            if len(coords) < 2 or value is None or not step:
+                continue
+            key = (float(coords[1]), float(coords[0]))
+            try:
+                grouped.setdefault(key, {})[parse_iso_utc(step)] = float(value)
+            except (TypeError, ValueError):
+                continue
+
+        if not grouped:
+            continue
+
+        best = min(
+            grouped.items(),
+            key=lambda item: (
+                haversine_km(spot.lat, spot.lon, item[0][0], item[0][1]),
+                -len(item[1]),
+            ),
+        )
+        (chosen_lat, chosen_lon), rows = best
+        chosen_distance_km = haversine_km(spot.lat, spot.lon, chosen_lat, chosen_lon)
+        return rows, chosen_lat, chosen_lon, chosen_distance_km
+
+    return rows, chosen_lat, chosen_lon, chosen_distance_km
+
+
 def fetch_met_weathercorrection(harbor_slug: str) -> tuple[Optional[datetime], dict[datetime, dict[str, float]]]:
     resp = requests.get(
         MET_TIDALWATER_URL,
@@ -285,6 +435,9 @@ def write_station_map(rows: list[dict]) -> None:
         "station_lon",
         "distance_km",
         "met_harbor_slug",
+        "dkss_point_lat",
+        "dkss_point_lon",
+        "dkss_distance_km",
     ]
     with open(STATION_MAP_CACHE, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -293,10 +446,19 @@ def write_station_map(rows: list[dict]) -> None:
             writer.writerow({key: row.get(key, "") for key in fieldnames})
 
 
-def write_tide_rows(path: str, rows: list[dict], include_local_time: bool) -> None:
+def write_tide_rows(
+    path: str,
+    rows: list[dict],
+    include_local_time: bool,
+    dmi_meta: Optional[dict[str, datetime]] = None,
+) -> None:
     ensure_dir(os.path.dirname(path))
     with open(path, "w", newline="", encoding="utf-8") as f:
         f.write(f"# Created: {datetime.now(UTC).isoformat()}\n")
+        if dmi_meta and dmi_meta.get("model_run"):
+            f.write(f"# Model run: {dmi_meta['model_run'].isoformat()}\n")
+        if dmi_meta and dmi_meta.get("created"):
+            f.write(f"# DMI Created: {dmi_meta['created'].isoformat()}\n")
         f.write("# Values are meters above mean sea level (MSL)\n")
         fieldnames = [
             "spot",
@@ -310,6 +472,7 @@ def write_tide_rows(path: str, rows: list[dict], include_local_time: bool) -> No
             [
                 "astronomical_tide_m",
                 "surge_m",
+                "dmi_dkss_m",
                 "met_tide_m",
                 "total_water_level_m",
             ]
@@ -320,10 +483,11 @@ def write_tide_rows(path: str, rows: list[dict], include_local_time: bool) -> No
             writer.writerow({key: row.get(key, "") for key in fieldnames})
 
 
-def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict]]:
+def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict], dict[str, datetime]]:
     stations = fetch_station_list()
     station_rows: list[dict] = []
     tide_rows: list[dict] = []
+    dmi_meta = fetch_dmi_dkss_metadata()
 
     start_dt = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     end_dt = start_dt + timedelta(days=3)
@@ -346,8 +510,18 @@ def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict]]:
 
         astronomical = fetch_kartverket_predictions(station, start_dt, end_dt)
         _, corrected = fetch_met_weathercorrection(station.harbor_slug)
+        dkss_rows, dkss_point_lat, dkss_point_lon, dkss_distance_km = fetch_dmi_dkss_for_spot(spot)
+        station_rows[-1]["dkss_point_lat"] = (
+            f"{dkss_point_lat:.6f}" if dkss_point_lat is not None else ""
+        )
+        station_rows[-1]["dkss_point_lon"] = (
+            f"{dkss_point_lon:.6f}" if dkss_point_lon is not None else ""
+        )
+        station_rows[-1]["dkss_distance_km"] = (
+            f"{dkss_distance_km:.1f}" if dkss_distance_km is not None else ""
+        )
 
-        hourly_times = sorted(set(astronomical.keys()) | set(corrected.keys()))
+        hourly_times = sorted(set(astronomical.keys()) | set(corrected.keys()) | set(dkss_rows.keys()))
         for dt in hourly_times:
             if dt < start_dt or dt > end_dt:
                 continue
@@ -365,6 +539,9 @@ def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict]]:
                     "surge_m": (
                         f"{corrected_row['surge_m']:.3f}" if "surge_m" in corrected_row else ""
                     ),
+                    "dmi_dkss_m": (
+                        f"{dkss_rows[dt]:.3f}" if dt in dkss_rows else ""
+                    ),
                     "met_tide_m": (
                         f"{corrected_row['met_tide_m']:.3f}" if "met_tide_m" in corrected_row else ""
                     ),
@@ -375,7 +552,7 @@ def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict]]:
             )
 
     tide_rows.sort(key=lambda row: (normalize_name(row["spot"]), row["time_utc"]))
-    return station_rows, tide_rows
+    return station_rows, tide_rows, dmi_meta
 
 
 def parse_args() -> argparse.Namespace:
@@ -391,10 +568,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     spots = selected_spots(include_all_spots=args.all_spots)
-    station_rows, tide_rows = build_rows(spots)
+    station_rows, tide_rows, dmi_meta = build_rows(spots)
     write_station_map(station_rows)
-    write_tide_rows(TIDE_CACHE, tide_rows, include_local_time=False)
-    write_tide_rows(TIDE_PUBLIC, tide_rows, include_local_time=True)
+    write_tide_rows(TIDE_CACHE, tide_rows, include_local_time=False, dmi_meta=dmi_meta)
+    write_tide_rows(TIDE_PUBLIC, tide_rows, include_local_time=True, dmi_meta=dmi_meta)
     print(
         f"[TIDE] Skrev {len(station_rows)} stasjonskoblinger "
         f"for {len(spots)} spot(s) til {STATION_MAP_CACHE}"
