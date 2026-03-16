@@ -42,6 +42,8 @@ DMI_API_KEY_STAC = os.getenv("DMI_API_KEY_STAC", "a4b09032-bca5-4255-ac85-6fea95
 STATION_MAP_CACHE = os.path.join(CACHE_DIR, "tide_spot_stations.csv")
 TIDE_CACHE = os.path.join(CACHE_DIR, "tides_norway_spots_cache.csv")
 TIDE_PUBLIC = os.path.join(PUBLIC_DIR, "tides_norway_spots_readable.csv")
+DKSS_COMPARE_CACHE_TEMPLATE = os.path.join(CACHE_DIR, "dkss_compare_{slug}.csv")
+DKSS_COMPARE_PUBLIC_TEMPLATE = os.path.join(PUBLIC_DIR, "dkss_compare_{slug}.csv")
 
 
 @dataclass(frozen=True)
@@ -80,6 +82,11 @@ DKSS_DIAGNOSTIC_LABELS = {
     "Saltstein": "Saltstein",
 }
 DKSS_SURGE_PARAM_ID = 82
+DKSS_TEST_POINTS = {
+    "Lista": (58.098387, 6.572504),
+    "Pigsty/Piggy": (58.751998, 5.471719),
+    "Saltstein": (58.967206, 9.809798),
+}
 
 
 _DKSS_METHOD_LOGGED = False
@@ -713,10 +720,26 @@ def write_tide_rows(
             writer.writerow({key: row.get(key, "") for key in fieldnames})
 
 
-def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict], dict[str, datetime]]:
+def write_dkss_compare_rows(path: str, rows: list[dict], dmi_meta: Optional[dict[str, datetime]] = None) -> None:
+    ensure_dir(os.path.dirname(path))
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        f.write(f"# Created: {datetime.now(UTC).isoformat()}\n")
+        if dmi_meta and dmi_meta.get("model_run"):
+            f.write(f"# Model run: {dmi_meta['model_run'].isoformat()}\n")
+        if dmi_meta and dmi_meta.get("created"):
+            f.write(f"# DMI Created: {dmi_meta['created'].isoformat()}\n")
+        fieldnames = ["tid", "dkssGammel", "dkssNy", "totalWaterMet"]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: row.get(key, "") for key in fieldnames})
+
+
+def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict], dict[str, datetime], dict[str, list[dict]]]:
     stations = fetch_station_list()
     station_rows: list[dict] = []
     tide_rows: list[dict] = []
+    compare_rows_by_spot: dict[str, list[dict]] = {}
     dmi_meta = fetch_dmi_dkss_metadata()
 
     start_dt = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
@@ -741,6 +764,17 @@ def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict], dict[str, dat
         astronomical = fetch_kartverket_predictions(station, start_dt, end_dt)
         _, corrected = fetch_met_weathercorrection(station.harbor_slug)
         dkss_rows, dkss_point_lat, dkss_point_lon, dkss_distance_km, dkss_iy, dkss_ix = fetch_dmi_dkss_for_spot(spot)
+        test_point = DKSS_TEST_POINTS.get(spot.name)
+        dkss_new_rows: dict[datetime, float] = {}
+        if test_point:
+            dkss_new_rows, dkss_new_lat, dkss_new_lon = fetch_dmi_dkss_position_rows(*test_point)
+            chosen_lat = dkss_new_lat if dkss_new_lat is not None else test_point[0]
+            chosen_lon = dkss_new_lon if dkss_new_lon is not None else test_point[1]
+            print(
+                f"[DKSS TEST] {spot.name}: ny punktquery target=({test_point[0]:.6f}, {test_point[1]:.6f}) "
+                f"used=({chosen_lat:.6f}, {chosen_lon:.6f}) "
+                f"dist={haversine_km(spot.lat, spot.lon, chosen_lat, chosen_lon):.1f} km"
+            )
         station_rows[-1]["dkss_point_lat"] = (
             f"{dkss_point_lat:.6f}" if dkss_point_lat is not None else ""
         )
@@ -753,7 +787,10 @@ def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict], dict[str, dat
         station_rows[-1]["dkss_iy"] = str(dkss_iy) if dkss_iy is not None else ""
         station_rows[-1]["dkss_ix"] = str(dkss_ix) if dkss_ix is not None else ""
 
-        hourly_times = sorted(set(astronomical.keys()) | set(corrected.keys()) | set(dkss_rows.keys()))
+        hourly_times = sorted(
+            set(astronomical.keys()) | set(corrected.keys()) | set(dkss_rows.keys()) | set(dkss_new_rows.keys())
+        )
+        compare_rows: list[dict] = []
         for dt in hourly_times:
             if dt < start_dt or dt > end_dt:
                 continue
@@ -808,9 +845,20 @@ def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict], dict[str, dat
                     ),
                 }
             )
+            compare_rows.append(
+                {
+                    "tid": format_local(dt),
+                    "dkssGammel": f"{dkss_rows[dt]:.3f}" if dt in dkss_rows else "",
+                    "dkssNy": f"{dkss_new_rows[dt]:.3f}" if dt in dkss_new_rows else "",
+                    "totalWaterMet": (
+                        f"{corrected_row['total_m']:.3f}" if "total_m" in corrected_row else ""
+                    ),
+                }
+            )
+        compare_rows_by_spot[spot.name] = compare_rows
 
     tide_rows.sort(key=lambda row: (normalize_name(row["spot"]), row["time_utc"]))
-    return station_rows, tide_rows, dmi_meta
+    return station_rows, tide_rows, dmi_meta, compare_rows_by_spot
 
 
 def parse_args() -> argparse.Namespace:
@@ -826,10 +874,17 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     spots = selected_spots(include_all_spots=args.all_spots)
-    station_rows, tide_rows, dmi_meta = build_rows(spots)
+    station_rows, tide_rows, dmi_meta, compare_rows_by_spot = build_rows(spots)
     write_station_map(station_rows)
     write_tide_rows(TIDE_CACHE, tide_rows, include_local_time=False, dmi_meta=dmi_meta)
     write_tide_rows(TIDE_PUBLIC, tide_rows, include_local_time=True, dmi_meta=dmi_meta)
+    for spot in spots:
+        compare_rows = compare_rows_by_spot.get(spot.name, [])
+        cache_path = DKSS_COMPARE_CACHE_TEMPLATE.format(slug=spot.slug)
+        public_path = DKSS_COMPARE_PUBLIC_TEMPLATE.format(slug=spot.slug)
+        write_dkss_compare_rows(cache_path, compare_rows, dmi_meta=dmi_meta)
+        write_dkss_compare_rows(public_path, compare_rows, dmi_meta=dmi_meta)
+        print(f"[DKSS TEST] Skrev {len(compare_rows)} sammenlikningsrader til {public_path}")
     print(
         f"[TIDE] Skrev {len(station_rows)} stasjonskoblinger "
         f"for {len(spots)} spot(s) til {STATION_MAP_CACHE}"

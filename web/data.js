@@ -493,28 +493,28 @@ window.MAP_DATA = {
       name: "Lista DKSS gridpunkt",
       provider: "DMI DKSS",
       linkedSpot: "Lista",
-      lat: 58.025000,
-      lon: 6.458436,
+      lat: 58.098387,
+      lon: 6.572504,
       status: "good",
-      summary: "Gridpunkt for DMI sea-mean-deviation ved Lista. Brukes som surge-sammenligning uten tide."
+      summary: "Manuelt testpunkt for DMI sea-mean-deviation ved Lista. Brukes for aa sammenlikne gammel laast DKSS-celle mot nytt punkt."
     },
     {
       name: "Jaeren DKSS gridpunkt",
       provider: "DMI DKSS",
       linkedSpot: "Pigsty/Piggy",
-      lat: 58.775000,
-      lon: 5.208424,
+      lat: 58.751998,
+      lon: 5.471719,
       status: "good",
-      summary: "Gridpunkt for DMI sea-mean-deviation ved Jaeren/Piggy. Brukes som surge-sammenligning uten tide."
+      summary: "Manuelt testpunkt for DMI sea-mean-deviation ved Jaeren/Piggy. Brukes for aa sammenlikne gammel laast DKSS-celle mot nytt punkt."
     },
     {
       name: "Saltstein DKSS gridpunkt",
       provider: "DMI DKSS",
       linkedSpot: "Saltstein",
-      lat: 58.775000,
-      lon: 9.708467,
+      lat: 58.967206,
+      lon: 9.809798,
       status: "good",
-      summary: "Gridpunkt for DMI sea-mean-deviation ved Saltstein. Brukes som surge-sammenligning uten tide."
+      summary: "Manuelt testpunkt for DMI sea-mean-deviation ved Saltstein. Brukes for aa sammenlikne gammel laast DKSS-celle mot nytt punkt."
     },
     {
       name: "Sirevag",
