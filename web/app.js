@@ -6,11 +6,31 @@ const NORWAY_BOUNDS = {
   north: 71.55,
   east: 32.2,
 };
-const COAST_BUFFER_KM = 100;
+const MAP_BUFFER_KM = 400;
+const TERMINATOR_SAMPLE_DEG = 0.25;
+
+function expandBounds(bounds, bufferKm) {
+  const centerLat = (bounds.south + bounds.north) / 2;
+  const latBufferDeg = bufferKm / 111.32;
+  const lonBufferDeg = bufferKm / (111.32 * Math.cos(centerLat * Math.PI / 180));
+  return {
+    south: bounds.south - latBufferDeg,
+    west: bounds.west - lonBufferDeg,
+    north: bounds.north + latBufferDeg,
+    east: bounds.east + lonBufferDeg,
+  };
+}
+
+const MAP_BOUNDS = expandBounds(NORWAY_BOUNDS, MAP_BUFFER_KM);
 
 const map = L.map("map", {
   zoomControl: true,
   attributionControl: true,
+  maxBounds: [
+    [MAP_BOUNDS.south, MAP_BOUNDS.west],
+    [MAP_BOUNDS.north, MAP_BOUNDS.east],
+  ],
+  maxBoundsViscosity: 1.0,
 }).setView([65.0, 13.0], 5);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -18,9 +38,9 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap",
 }).addTo(map);
 
-map.createPane("frontPane");
-map.getPane("frontPane").style.zIndex = 330;
-map.getPane("frontPane").style.pointerEvents = "none";
+map.createPane("terminatorPane");
+map.getPane("terminatorPane").style.zIndex = 330;
+map.getPane("terminatorPane").style.pointerEvents = "none";
 
 const spotLayer = L.featureGroup().addTo(map);
 const spotMarkers = [];
@@ -157,124 +177,79 @@ legend.onAdd = function () {
   const div = L.DomUtil.create("div", "legend");
   div.innerHTML =
     '<div class="title">Lys Over Norge</div>' +
-    '<div class="row"><span class="swatch" style="background:rgba(0,0,0,0.60)"></span> Morkt</div>' +
-    '<div class="row"><span class="swatch" style="background:rgba(0,0,0,0.20)"></span> Civilt lys</div>' +
+    '<div class="row"><span class="swatch" style="background:rgba(0,0,0,0.50)"></span> Morkt</div>' +
+    '<div class="row"><span class="swatch" style="background:rgba(0,0,0,0.25)"></span> Civilt lys</div>' +
     '<div class="row"><span class="swatch" style="background:rgba(255,255,255,0.95)"></span> Etter soloppgang</div>' +
     '<div class="row"><span class="swatch" style="background:#60a5fa"></span> Spot</div>';
   return div;
 };
 legend.addTo(map);
 
-let bufferedNorway = null;
-let daylightOverlay = null;
+let civilTerminatorLayer = null;
+let nightTerminatorLayer = null;
 
-function smoothstep(edge0, edge1, value) {
-  const x = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
-  return x * x * (3 - 2 * x);
-}
-
-function darknessOpacityForAltitude(altitude) {
-  if (altitude <= -6) {
-    return 0.6;
-  }
-  if (altitude < -0.8) {
-    const t = smoothstep(-6, -0.8, altitude);
-    return 0.6 + (0.2 - 0.6) * t;
-  }
-  if (altitude < 0.35) {
-    const t = smoothstep(-0.8, 0.35, altitude);
-    return 0.2 * (1 - t);
-  }
-  return 0;
-}
-
-function geoToCanvasPoint(lat, lon, width, height) {
-  const x = ((lon - NORWAY_BOUNDS.west) / (NORWAY_BOUNDS.east - NORWAY_BOUNDS.west)) * width;
-  const y = ((NORWAY_BOUNDS.north - lat) / (NORWAY_BOUNDS.north - NORWAY_BOUNDS.south)) * height;
-  return [x, y];
-}
-
-function drawFeaturePath(ctx, feature) {
-  const polygons = feature.geometry.type === "Polygon"
-    ? [feature.geometry.coordinates]
-    : feature.geometry.coordinates;
-
-  polygons.forEach((polygon) => {
-    polygon.forEach((ring) => {
-      ring.forEach((coord, index) => {
-        const point = geoToCanvasPoint(coord[1], coord[0], ctx.canvas.width, ctx.canvas.height);
-        if (index === 0) {
-          ctx.moveTo(point[0], point[1]);
-        } else {
-          ctx.lineTo(point[0], point[1]);
-        }
-      });
-      ctx.closePath();
-    });
-  });
-}
-
-function buildLowResOverlay(date, width, height) {
-  const sampleWidth = Math.max(360, Math.round(width / 2));
-  const sampleHeight = Math.max(300, Math.round(height / 2));
-  const offscreen = document.createElement("canvas");
-  offscreen.width = sampleWidth;
-  offscreen.height = sampleHeight;
-  const offCtx = offscreen.getContext("2d");
-
-  for (let y = 0; y < sampleHeight; y += 1) {
-    for (let x = 0; x < sampleWidth; x += 1) {
-      const lon = NORWAY_BOUNDS.west + ((x + 0.5) / sampleWidth) * (NORWAY_BOUNDS.east - NORWAY_BOUNDS.west);
-      const lat = NORWAY_BOUNDS.north - ((y + 0.5) / sampleHeight) * (NORWAY_BOUNDS.north - NORWAY_BOUNDS.south);
-      const altitude = sunAltitudeDeg(date, lat, lon);
-      const darkOpacity = darknessOpacityForAltitude(altitude);
-
-      if (darkOpacity > 0.002) {
-        offCtx.fillStyle = `rgba(5, 7, 11, ${darkOpacity.toFixed(3)})`;
-        offCtx.fillRect(x, y, 1, 1);
-      }
+function buildAltitudeGrid(date) {
+  const features = [];
+  for (let lat = MAP_BOUNDS.south; lat <= MAP_BOUNDS.north + 1e-9; lat += TERMINATOR_SAMPLE_DEG) {
+    for (let lon = MAP_BOUNDS.west; lon <= MAP_BOUNDS.east + 1e-9; lon += TERMINATOR_SAMPLE_DEG) {
+      features.push(
+        turf.point([lon, lat], {
+          altitude: sunAltitudeDeg(date, lat, lon),
+        })
+      );
     }
   }
-
-  return offscreen;
+  return turf.featureCollection(features);
 }
 
-function drawDarknessOverlay(date) {
-  const width = 960;
-  const height = 700;
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  const fieldCanvas = buildLowResOverlay(date, width, height);
-
-  ctx.clearRect(0, 0, width, height);
-  ctx.save();
-  if (bufferedNorway) {
-    ctx.beginPath();
-    drawFeaturePath(ctx, bufferedNorway);
-    ctx.clip("evenodd");
+function clearTerminatorLayers() {
+  if (civilTerminatorLayer) {
+    map.removeLayer(civilTerminatorLayer);
+    civilTerminatorLayer = null;
   }
-  ctx.imageSmoothingEnabled = true;
-  ctx.filter = "blur(2px)";
-  ctx.drawImage(fieldCanvas, 0, 0, width, height);
-  ctx.filter = "none";
-  ctx.restore();
+  if (nightTerminatorLayer) {
+    map.removeLayer(nightTerminatorLayer);
+    nightTerminatorLayer = null;
+  }
+}
 
-  const url = canvas.toDataURL("image/png");
-  const bounds = [
-    [NORWAY_BOUNDS.south, NORWAY_BOUNDS.west],
-    [NORWAY_BOUNDS.north, NORWAY_BOUNDS.east],
-  ];
+function buildTerminatorLayer(features) {
+  return L.geoJSON(features, {
+    pane: "terminatorPane",
+    interactive: false,
+    style: () => ({
+      stroke: false,
+      fillColor: "#05070b",
+      fillOpacity: 0.25,
+    }),
+  }).addTo(map);
+}
 
-  if (!daylightOverlay) {
-    daylightOverlay = L.imageOverlay(url, bounds, {
-      pane: "frontPane",
-      interactive: false,
-      opacity: 1,
-    }).addTo(map);
-  } else {
-    daylightOverlay.setUrl(url);
+function renderTerminator(date) {
+  clearTerminatorLayers();
+
+  if (!turf.isobands) {
+    return;
+  }
+
+  const altitudeGrid = buildAltitudeGrid(date);
+
+  try {
+    const civilBands = turf.isobands(altitudeGrid, [-90, 0], {
+      zProperty: "altitude",
+    });
+    const nightBands = turf.isobands(altitudeGrid, [-90, -6], {
+      zProperty: "altitude",
+    });
+
+    if (civilBands.features.length > 0) {
+      civilTerminatorLayer = buildTerminatorLayer(civilBands);
+    }
+    if (nightBands.features.length > 0) {
+      nightTerminatorLayer = buildTerminatorLayer(nightBands);
+    }
+  } catch (error) {
+    clearTerminatorLayers();
   }
 }
 
@@ -308,7 +283,7 @@ function currentSelectedDate() {
 function renderAtSelectedTime() {
   const date = currentSelectedDate();
   timeValue.textContent = formatTimeLabel(date);
-  drawDarknessOverlay(date);
+  renderTerminator(date);
   updateSpotMarkers(date);
 }
 
@@ -318,13 +293,3 @@ timeRange.addEventListener("input", (event) => {
 });
 
 renderAtSelectedTime();
-
-fetch("./data/norway.geojson")
-  .then((response) => response.json())
-  .then((geojson) => {
-    bufferedNorway = turf.buffer(geojson.features[0], COAST_BUFFER_KM, { units: "kilometers" });
-    renderAtSelectedTime();
-  })
-  .catch(() => {
-    renderAtSelectedTime();
-  });

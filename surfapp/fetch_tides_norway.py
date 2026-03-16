@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import numpy as np
+import pygrib
 import requests
 
 
@@ -70,7 +72,18 @@ SPOTS = [
     Spot("Persfjord", "persfjord", 70.5, 31.0),
 ]
 
-DEFAULT_STREAMLIT_SPOTS = ("Lista",)
+DEFAULT_STREAMLIT_SPOTS = ("Lista", "Pigsty/Piggy", "Saltstein")
+DKSS_DIAGNOSTIC_SPOTS = {"Lista", "Pigsty/Piggy", "Saltstein"}
+DKSS_DIAGNOSTIC_LABELS = {
+    "Lista": "Lista",
+    "Pigsty/Piggy": "Jæren",
+    "Saltstein": "Saltstein",
+}
+DKSS_SURGE_PARAM_ID = 82
+
+
+_DKSS_METHOD_LOGGED = False
+_DKSS_GRID_CACHE: Optional[dict] = None
 
 
 # MET tidalwater uses harbor slugs, not station codes.
@@ -283,11 +296,124 @@ def fetch_dmi_dkss_metadata() -> dict[str, datetime]:
     return meta
 
 
-def fetch_dmi_dkss_for_spot(
-    spot: Spot,
-) -> tuple[dict[datetime, float], Optional[float], Optional[float], Optional[float]]:
-    base_params = {
-        "coords": f"POINT({spot.lon:.6f} {spot.lat:.6f})",
+def log_dkss_methods_once() -> None:
+    global _DKSS_METHOD_LOGGED
+    if _DKSS_METHOD_LOGGED:
+        return
+    print("[DKSS] Previous method: EDR position query with EDR cube bbox fallback.")
+    print("[DKSS] New main method: forecastdata GRIB -> nearest valid sea grid cell -> EDR position query at locked gridpoint.")
+    _DKSS_METHOD_LOGGED = True
+
+
+def fetch_dmi_dkss_item_detail() -> Optional[dict]:
+    params = {"limit": 1, "api-key": DMI_API_KEY_STAC}
+    try:
+        resp = requests.get(
+            DMI_DKSS_STAC_URL,
+            params=params,
+            headers={"User-Agent": USER_AGENT},
+            timeout=25,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException:
+        return None
+
+    features = data.get("features") or []
+    if not features:
+        return None
+
+    item_id = features[0].get("id")
+    if not item_id:
+        return None
+
+    try:
+        resp = requests.get(
+            f"{DMI_DKSS_STAC_URL}/{item_id}",
+            params={"api-key": DMI_API_KEY_STAC},
+            headers={"User-Agent": USER_AGENT},
+            timeout=25,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except requests.RequestException:
+        return None
+
+
+def ensure_dkss_reference_grib(item: dict) -> Optional[str]:
+    asset = (item.get("asset") or {}).get("data") or (item.get("assets") or {}).get("data")
+    href = (asset or {}).get("href")
+    item_id = item.get("id")
+    if not href or not item_id:
+        return None
+
+    ensure_dir(CACHE_DIR)
+    path = os.path.join(CACHE_DIR, item_id)
+    if os.path.exists(path):
+        return path
+
+    try:
+        resp = requests.get(
+            href,
+            headers={"User-Agent": USER_AGENT},
+            timeout=60,
+        )
+        resp.raise_for_status()
+    except requests.RequestException:
+        return None
+
+    with open(path, "wb") as f:
+        f.write(resp.content)
+    return path
+
+
+def load_dkss_reference_grid() -> Optional[dict]:
+    global _DKSS_GRID_CACHE
+    if _DKSS_GRID_CACHE is not None:
+        return _DKSS_GRID_CACHE
+
+    item = fetch_dmi_dkss_item_detail()
+    if not item:
+        return None
+
+    grib_path = ensure_dkss_reference_grib(item)
+    if not grib_path:
+        return None
+
+    try:
+        with pygrib.open(grib_path) as grbs:
+            msg = next(
+                grb for grb in grbs
+                if grb.typeOfLevel == "surface" and getattr(grb, "paramId", None) == DKSS_SURGE_PARAM_ID
+            )
+            lats, lons = msg.latlons()
+            values = np.array(msg.values, dtype=float)
+    except (OSError, RuntimeError, StopIteration, ValueError):
+        return None
+
+    valid_mask = np.isfinite(values)
+    props = item.get("properties") or {}
+    _DKSS_GRID_CACHE = {
+        "item_id": item.get("id"),
+        "grib_path": grib_path,
+        "valid_time": parse_iso_utc(props["datetime"]) if props.get("datetime") else None,
+        "model_run": parse_iso_utc(props["modelRun"]) if props.get("modelRun") else None,
+        "lats": lats,
+        "lons": lons,
+        "values": values,
+        "valid_mask": valid_mask,
+        "bbox": (-4.125, 48.525, 30.292, 65.875),
+        "param_id": DKSS_SURGE_PARAM_ID,
+    }
+    return _DKSS_GRID_CACHE
+
+
+def fetch_dmi_dkss_position_rows(
+    lat: float,
+    lon: float,
+) -> tuple[dict[datetime, float], Optional[float], Optional[float]]:
+    params = {
+        "coords": f"POINT({lon:.6f} {lat:.6f})",
         "crs": "crs84",
         "parameter-name": "sea-mean-deviation",
         "api-key": DMI_API_KEY_EDR,
@@ -296,22 +422,19 @@ def fetch_dmi_dkss_for_spot(
     try:
         resp = requests.get(
             DMI_DKSS_POSITION_URL,
-            params=base_params,
+            params=params,
             headers={"User-Agent": USER_AGENT},
             timeout=30,
         )
         resp.raise_for_status()
         data = resp.json()
     except (requests.RequestException, ValueError):
-        return {}, None, None, None
+        return {}, None, None
 
-    features = data.get("features") or []
     rows: dict[datetime, float] = {}
     chosen_lat: Optional[float] = None
     chosen_lon: Optional[float] = None
-    chosen_distance_km: Optional[float] = None
-
-    for feature in features:
+    for feature in data.get("features") or []:
         geometry = feature.get("geometry") or {}
         coords = geometry.get("coordinates") or []
         props = feature.get("properties") or {}
@@ -320,76 +443,166 @@ def fetch_dmi_dkss_for_spot(
         if len(coords) >= 2 and chosen_lat is None and chosen_lon is None:
             chosen_lon = float(coords[0])
             chosen_lat = float(coords[1])
-            chosen_distance_km = haversine_km(spot.lat, spot.lon, chosen_lat, chosen_lon)
         if value is None or not step:
             continue
         try:
             rows[parse_iso_utc(step)] = float(value)
         except (TypeError, ValueError):
             continue
+    return rows, chosen_lat, chosen_lon
 
-    if rows:
-        return rows, chosen_lat, chosen_lon, chosen_distance_km
 
-    start_dt = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-    end_dt = start_dt + timedelta(days=3)
-    cube_common = {
-        "crs": "crs84",
-        "parameter-name": "sea-mean-deviation",
-        "api-key": DMI_API_KEY_EDR,
-        "f": "GeoJSON",
-        "datetime": f"{start_dt.isoformat()}/{end_dt.isoformat()}",
-    }
-    search_radii_deg = (0.35, 0.7)
+def nearest_valid_dkss_gridpoint(spot: Spot) -> tuple[Optional[dict], Optional[str]]:
+    grid = load_dkss_reference_grid()
+    if not grid:
+        return None, "Could not load DKSS reference GRIB grid."
 
-    for radius in search_radii_deg:
-        params = dict(cube_common)
-        params["bbox"] = (
-            f"{spot.lon - radius:.6f},{spot.lat - radius:.6f},"
-            f"{spot.lon + radius:.6f},{spot.lat + radius:.6f}"
+    west, south, east, north = grid["bbox"]
+    if not (south <= spot.lat <= north and west <= spot.lon <= east):
+        return None, (
+            f"Target lies outside dkss_nsbs bbox "
+            f"({south:.3f}-{north:.3f}N, {west:.3f}-{east:.3f}E)."
         )
-        try:
-            resp = requests.get(
-                DMI_DKSS_CUBE_URL,
-                params=params,
-                headers={"User-Agent": USER_AGENT},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        except (requests.RequestException, ValueError):
-            continue
 
-        grouped: dict[tuple[float, float], dict[datetime, float]] = {}
-        for feature in data.get("features") or []:
-            geometry = feature.get("geometry") or {}
-            coords = geometry.get("coordinates") or []
-            props = feature.get("properties") or {}
-            value = props.get("sea-mean-deviation")
-            step = props.get("step")
-            if len(coords) < 2 or value is None or not step:
-                continue
-            key = (float(coords[1]), float(coords[0]))
-            try:
-                grouped.setdefault(key, {})[parse_iso_utc(step)] = float(value)
-            except (TypeError, ValueError):
-                continue
+    lats = grid["lats"]
+    lons = grid["lons"]
+    valid_mask = grid["valid_mask"]
+    if not np.any(valid_mask):
+        return None, "DKSS GRIB grid had no valid sea cells."
 
-        if not grouped:
-            continue
+    target_lat_rad = math.radians(spot.lat)
+    lat_rad = np.radians(lats)
+    dlat = lat_rad - target_lat_rad
+    dlon = np.radians(lons - spot.lon)
+    a = (
+        np.sin(dlat / 2.0) ** 2
+        + np.cos(target_lat_rad) * np.cos(lat_rad) * np.sin(dlon / 2.0) ** 2
+    )
+    distances_km = 2.0 * 6371.0 * np.arcsin(np.sqrt(a))
+    distances_km = np.where(valid_mask, distances_km, np.inf)
+    flat_index = int(np.argmin(distances_km))
+    if not np.isfinite(distances_km.flat[flat_index]):
+        return None, "No valid DKSS sea cell found near target."
 
-        best = min(
-            grouped.items(),
-            key=lambda item: (
-                haversine_km(spot.lat, spot.lon, item[0][0], item[0][1]),
-                -len(item[1]),
-            ),
+    iy, ix = np.unravel_index(flat_index, distances_km.shape)
+    return {
+        "iy": int(iy),
+        "ix": int(ix),
+        "lat_used": float(lats[iy, ix]),
+        "lon_used": float(lons[iy, ix]),
+        "dist_km": float(distances_km[iy, ix]),
+        "reference_value": float(grid["values"][iy, ix]),
+        "reference_valid_time": grid.get("valid_time"),
+        "reference_model_run": grid.get("model_run"),
+        "param_id": grid.get("param_id"),
+    }, None
+
+
+def print_dkss_diagnostics(
+    spot: Spot,
+    direct_rows: dict[datetime, float],
+    direct_lat: Optional[float],
+    direct_lon: Optional[float],
+    locked_rows: dict[datetime, float],
+    grid_point: Optional[dict],
+    failure_reason: Optional[str],
+) -> None:
+    if spot.name not in DKSS_DIAGNOSTIC_SPOTS:
+        return
+
+    label = DKSS_DIAGNOSTIC_LABELS.get(spot.name, spot.name)
+    print(
+        f"[DKSS] {label}: target=({spot.lat:.6f}, {spot.lon:.6f}) "
+        f"direct_api={'yes' if direct_rows else 'no'}"
+    )
+
+    if direct_rows:
+        direct_time = sorted(direct_rows)[0]
+        direct_value = direct_rows[direct_time]
+        coord_note = ""
+        if direct_lat is not None and direct_lon is not None:
+            coord_note = f" snapped=({direct_lat:.6f}, {direct_lon:.6f})"
+        print(
+            f"[DKSS] {label}: direct value {direct_value:.3f} m at "
+            f"{direct_time.isoformat()}{coord_note}"
         )
-        (chosen_lat, chosen_lon), rows = best
-        chosen_distance_km = haversine_km(spot.lat, spot.lon, chosen_lat, chosen_lon)
-        return rows, chosen_lat, chosen_lon, chosen_distance_km
+    else:
+        print(f"[DKSS] {label}: direct coordinate query returned no usable value.")
 
-    return rows, chosen_lat, chosen_lon, chosen_distance_km
+    if grid_point:
+        ref_time = grid_point.get("reference_valid_time")
+        ref_time_str = ref_time.isoformat() if isinstance(ref_time, datetime) else "unknown"
+        print(
+            f"[DKSS] {label}: nearest valid sea cell iy={grid_point['iy']} ix={grid_point['ix']} "
+            f"lat={grid_point['lat_used']:.6f} lon={grid_point['lon_used']:.6f} "
+            f"dist={grid_point['dist_km']:.1f} km ref_value={grid_point['reference_value']:.3f} m "
+            f"ref_time={ref_time_str}"
+        )
+    elif failure_reason:
+        print(f"[DKSS] {label}: {failure_reason}")
+
+    if locked_rows:
+        locked_time = sorted(locked_rows)[0]
+        locked_value = locked_rows[locked_time]
+        print(
+            f"[DKSS] {label}: locked-gridpoint value {locked_value:.3f} m at "
+            f"{locked_time.isoformat()}"
+        )
+    elif not failure_reason:
+        print(f"[DKSS] {label}: locked-gridpoint query returned no usable value.")
+
+
+def fetch_dmi_dkss_for_spot(
+    spot: Spot,
+) -> tuple[
+    dict[datetime, float],
+    Optional[float],
+    Optional[float],
+    Optional[float],
+    Optional[int],
+    Optional[int],
+]:
+    log_dkss_methods_once()
+
+    direct_rows, direct_lat, direct_lon = fetch_dmi_dkss_position_rows(spot.lat, spot.lon)
+    grid_point, failure_reason = nearest_valid_dkss_gridpoint(spot)
+
+    if not grid_point:
+        print_dkss_diagnostics(
+            spot,
+            direct_rows,
+            direct_lat,
+            direct_lon,
+            {},
+            None,
+            failure_reason,
+        )
+        return {}, None, None, None, None, None
+
+    locked_rows, _, _ = fetch_dmi_dkss_position_rows(
+        grid_point["lat_used"],
+        grid_point["lon_used"],
+    )
+    if not locked_rows and direct_rows:
+        locked_rows = direct_rows
+
+    print_dkss_diagnostics(
+        spot,
+        direct_rows,
+        direct_lat,
+        direct_lon,
+        locked_rows,
+        grid_point,
+        failure_reason,
+    )
+    return (
+        locked_rows,
+        grid_point["lat_used"],
+        grid_point["lon_used"],
+        grid_point["dist_km"],
+        grid_point["iy"],
+        grid_point["ix"],
+    )
 
 
 def fetch_met_weathercorrection(harbor_slug: str) -> tuple[Optional[datetime], dict[datetime, dict[str, float]]]:
@@ -443,6 +656,8 @@ def write_station_map(rows: list[dict]) -> None:
         "dkss_point_lat",
         "dkss_point_lon",
         "dkss_distance_km",
+        "dkss_iy",
+        "dkss_ix",
     ]
     with open(STATION_MAP_CACHE, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -478,6 +693,11 @@ def write_tide_rows(
                 "astronomical_tide_m",
                 "surge_m",
                 "dmi_dkss_m",
+                "dkss_lat_used",
+                "dkss_lon_used",
+                "dkss_dist_km",
+                "dkss_iy",
+                "dkss_ix",
                 "met_tide_m",
                 "total_water_level_m",
                 "surge_p0_m",
@@ -520,7 +740,7 @@ def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict], dict[str, dat
 
         astronomical = fetch_kartverket_predictions(station, start_dt, end_dt)
         _, corrected = fetch_met_weathercorrection(station.harbor_slug)
-        dkss_rows, dkss_point_lat, dkss_point_lon, dkss_distance_km = fetch_dmi_dkss_for_spot(spot)
+        dkss_rows, dkss_point_lat, dkss_point_lon, dkss_distance_km, dkss_iy, dkss_ix = fetch_dmi_dkss_for_spot(spot)
         station_rows[-1]["dkss_point_lat"] = (
             f"{dkss_point_lat:.6f}" if dkss_point_lat is not None else ""
         )
@@ -530,6 +750,8 @@ def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict], dict[str, dat
         station_rows[-1]["dkss_distance_km"] = (
             f"{dkss_distance_km:.1f}" if dkss_distance_km is not None else ""
         )
+        station_rows[-1]["dkss_iy"] = str(dkss_iy) if dkss_iy is not None else ""
+        station_rows[-1]["dkss_ix"] = str(dkss_ix) if dkss_ix is not None else ""
 
         hourly_times = sorted(set(astronomical.keys()) | set(corrected.keys()) | set(dkss_rows.keys()))
         for dt in hourly_times:
@@ -552,6 +774,17 @@ def build_rows(spots: list[Spot]) -> tuple[list[dict], list[dict], dict[str, dat
                     "dmi_dkss_m": (
                         f"{dkss_rows[dt]:.3f}" if dt in dkss_rows else ""
                     ),
+                    "dkss_lat_used": (
+                        f"{dkss_point_lat:.6f}" if dkss_point_lat is not None else ""
+                    ),
+                    "dkss_lon_used": (
+                        f"{dkss_point_lon:.6f}" if dkss_point_lon is not None else ""
+                    ),
+                    "dkss_dist_km": (
+                        f"{dkss_distance_km:.1f}" if dkss_distance_km is not None else ""
+                    ),
+                    "dkss_iy": str(dkss_iy) if dkss_iy is not None else "",
+                    "dkss_ix": str(dkss_ix) if dkss_ix is not None else "",
                     "met_tide_m": (
                         f"{corrected_row['met_tide_m']:.3f}" if "met_tide_m" in corrected_row else ""
                     ),
