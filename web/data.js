@@ -493,10 +493,10 @@ window.MAP_DATA = {
       name: "Lista DKSS gridpunkt",
       provider: "DMI DKSS",
       linkedSpot: "Lista",
-      lat: 58.098387,
-      lon: 6.572504,
+      lat: 58.090000,
+      lon: 6.560000,
       status: "good",
-      summary: "Manuelt testpunkt for DMI sea-mean-deviation ved Lista. Brukes for aa sammenlikne gammel laast DKSS-celle mot nytt punkt."
+      summary: "Manuelt testpunkt for DMI sea-mean-deviation ved Lista. Fungerende kandidat soervest for forrige testpunkt, brukt for aa sammenlikne gammel laast DKSS-celle mot nytt punkt."
     },
     {
       name: "Jaeren DKSS gridpunkt",

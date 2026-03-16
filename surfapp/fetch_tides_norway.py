@@ -83,7 +83,7 @@ DKSS_DIAGNOSTIC_LABELS = {
 }
 DKSS_SURGE_PARAM_ID = 82
 DKSS_TEST_POINTS = {
-    "Lista": (58.098387, 6.572504),
+    "Lista": (58.090000, 6.560000),
     "Pigsty/Piggy": (58.751998, 5.471719),
     "Saltstein": (58.967206, 9.809798),
 }
