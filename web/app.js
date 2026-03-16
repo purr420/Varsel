@@ -43,7 +43,9 @@ map.getPane("terminatorPane").style.zIndex = 330;
 map.getPane("terminatorPane").style.pointerEvents = "none";
 
 const spotLayer = L.featureGroup().addTo(map);
+const dkssLayer = L.featureGroup().addTo(map);
 const spotMarkers = [];
+const spotByName = new Map();
 
 const osloPartsFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: OSLO_TIMEZONE,
@@ -111,9 +113,37 @@ function lightState(date, lat, lon) {
     return { key: "dark", label: "Morkt", opacity: 0.5 };
   }
   if (altitude < 0) {
-    return { key: "civil", label: "Civilt lys", opacity: 0.2 };
+    return { key: "civil", label: "Civilt lys", opacity: 0.25 };
   }
   return { key: "day", label: "Lyst", opacity: 0.0 };
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const toRad = (deg) => deg * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(a));
+}
+
+function bearingDeg(lat1, lon1, lat2, lon2) {
+  const toRad = (deg) => deg * Math.PI / 180;
+  const toDeg = (rad) => rad * 180 / Math.PI;
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+  const deltaLon = toRad(lon2 - lon1);
+  const y = Math.sin(deltaLon) * Math.cos(phi2);
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLon);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+function bearingLabel(deg) {
+  const directions = ["N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO", "S", "SSV", "SV", "VSV", "V", "VNV", "NV", "NNV"];
+  return directions[Math.round(deg / 22.5) % 16];
 }
 
 function spotMarkerColor(stateKey) {
@@ -146,6 +176,7 @@ function updateSpotMarkers(date) {
 }
 
 window.MAP_DATA.spots.forEach((spot) => {
+  spotByName.set(spot.name, spot);
   const marker = L.circleMarker([spot.lat, spot.lon], {
     radius: spot.kind === "mandal" ? 5.5 : 6.5,
     color: "#60a5fa",
@@ -164,6 +195,56 @@ window.MAP_DATA.spots.forEach((spot) => {
   spotMarkers.push({ marker, spot });
 });
 
+window.MAP_DATA.sources
+  .filter((source) => source.provider === "DMI DKSS")
+  .forEach((source) => {
+    const linkedSpot = spotByName.get(source.linkedSpot);
+    let relationHtml = "";
+
+    if (linkedSpot) {
+      const distanceKm = haversineKm(linkedSpot.lat, linkedSpot.lon, source.lat, source.lon);
+      const bearing = bearingDeg(linkedSpot.lat, linkedSpot.lon, source.lat, source.lon);
+      relationHtml =
+        `<div>Fra ${linkedSpot.name}: <b>${distanceKm.toFixed(1)} km</b> mot <b>${bearingLabel(bearing)}</b> (${bearing.toFixed(0)}°)</div>`;
+
+      L.polyline(
+        [
+          [linkedSpot.lat, linkedSpot.lon],
+          [source.lat, source.lon],
+        ],
+        {
+          color: "#f97316",
+          weight: 1.5,
+          opacity: 0.65,
+          dashArray: "4 4",
+        }
+      ).addTo(dkssLayer);
+    }
+
+    const popup =
+      `<div class="popup-title">${source.name}</div>` +
+      `<div class="popup-sub">${source.provider}</div>` +
+      `<div>Knyttet til: ${source.linkedSpot}</div>` +
+      relationHtml +
+      `<div>Lat/lon: ${source.lat.toFixed(4)}, ${source.lon.toFixed(4)}</div>` +
+      `<div style="margin-top:6px">${source.summary}</div>`;
+
+    const marker = L.circleMarker([source.lat, source.lon], {
+      radius: 5,
+      color: "#7c2d12",
+      fillColor: "#f97316",
+      fillOpacity: 0.95,
+      weight: 1.5,
+    }).addTo(dkssLayer);
+
+    marker.bindTooltip(source.name, {
+      direction: "top",
+      offset: [0, -4],
+      className: "label-tooltip",
+    });
+    marker.bindPopup(popup);
+  });
+
 map.fitBounds(
   [
     [NORWAY_BOUNDS.south, NORWAY_BOUNDS.west],
@@ -180,7 +261,8 @@ legend.onAdd = function () {
     '<div class="row"><span class="swatch" style="background:rgba(0,0,0,0.50)"></span> Morkt</div>' +
     '<div class="row"><span class="swatch" style="background:rgba(0,0,0,0.25)"></span> Civilt lys</div>' +
     '<div class="row"><span class="swatch" style="background:rgba(255,255,255,0.95)"></span> Etter soloppgang</div>' +
-    '<div class="row"><span class="swatch" style="background:#60a5fa"></span> Spot</div>';
+    '<div class="row"><span class="swatch" style="background:#60a5fa"></span> Spot</div>' +
+    '<div class="row"><span class="swatch" style="background:#f97316"></span> DKSS-gridpunkt</div>';
   return div;
 };
 legend.addTo(map);
@@ -190,16 +272,25 @@ let nightTerminatorLayer = null;
 
 function buildAltitudeGrid(date) {
   const features = [];
+  let minAltitude = Infinity;
+  let maxAltitude = -Infinity;
   for (let lat = MAP_BOUNDS.south; lat <= MAP_BOUNDS.north + 1e-9; lat += TERMINATOR_SAMPLE_DEG) {
     for (let lon = MAP_BOUNDS.west; lon <= MAP_BOUNDS.east + 1e-9; lon += TERMINATOR_SAMPLE_DEG) {
+      const altitude = sunAltitudeDeg(date, lat, lon);
+      minAltitude = Math.min(minAltitude, altitude);
+      maxAltitude = Math.max(maxAltitude, altitude);
       features.push(
         turf.point([lon, lat], {
-          altitude: sunAltitudeDeg(date, lat, lon),
+          altitude,
         })
       );
     }
   }
-  return turf.featureCollection(features);
+  return {
+    collection: turf.featureCollection(features),
+    minAltitude,
+    maxAltitude,
+  };
 }
 
 function clearTerminatorLayers() {
@@ -225,6 +316,24 @@ function buildTerminatorLayer(features) {
   }).addTo(map);
 }
 
+function mapBoundsFeatureCollection() {
+  return turf.featureCollection([
+    turf.bboxPolygon([MAP_BOUNDS.west, MAP_BOUNDS.south, MAP_BOUNDS.east, MAP_BOUNDS.north]),
+  ]);
+}
+
+function terminatorBandForThreshold(altitudeGrid, upperBound) {
+  if (altitudeGrid.maxAltitude < upperBound) {
+    return mapBoundsFeatureCollection();
+  }
+  if (altitudeGrid.minAltitude >= upperBound) {
+    return turf.featureCollection([]);
+  }
+  return turf.isobands(altitudeGrid.collection, [-90, upperBound], {
+    zProperty: "altitude",
+  });
+}
+
 function renderTerminator(date) {
   clearTerminatorLayers();
 
@@ -235,12 +344,8 @@ function renderTerminator(date) {
   const altitudeGrid = buildAltitudeGrid(date);
 
   try {
-    const civilBands = turf.isobands(altitudeGrid, [-90, 0], {
-      zProperty: "altitude",
-    });
-    const nightBands = turf.isobands(altitudeGrid, [-90, -6], {
-      zProperty: "altitude",
-    });
+    const civilBands = terminatorBandForThreshold(altitudeGrid, 0);
+    const nightBands = terminatorBandForThreshold(altitudeGrid, -6);
 
     if (civilBands.features.length > 0) {
       civilTerminatorLayer = buildTerminatorLayer(civilBands);
