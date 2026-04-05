@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="15" viewBox="0 0 12 15" role="img" aria-label="1 green bar active">
+  <rect x="1" y="1" width="10" height="3" rx="1.5" fill="#d1d5db"/>
+  <rect x="1" y="6" width="10" height="3" rx="1.5" fill="#d1d5db"/>
+  <rect x="1" y="11" width="10" height="3" rx="1.5" fill="#22c55e"/>
+</svg>

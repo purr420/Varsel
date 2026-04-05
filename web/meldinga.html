@@ -1,0 +1,2033 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meldinga – riktig bølgevarsel for norskekysten!</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light;
+
+      /* 1. Tokens / variabler */
+      --ff-forecast: "Montserrat", "Avenir Next", Avenir, "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif;
+      --fs-base: 1rem;
+      --fs-unit: 0.8em;
+      --fs-label: 0.8rem;
+      --fs-title: clamp(1.32rem, 2.1vw, 1.82rem);
+      --lh-forecast: 1.15;
+
+      --pad-cell-y: 0.45rem;
+      --pad-cell-x: 0.7rem;
+      --pill-pad-y: 0.28em;
+      --pill-pad-x: 0.5em;
+      --wind-pill-pad-x: 0.18em;
+
+      --gap-tight: 0.1rem;
+      --gap-mid: 0.45rem;
+      --gap-wide: 0.8rem;
+      --spot-gap-y: 0.7rem;
+      --header-gap-y: 0.26rem;
+      --cluster-gap-w: 0.6ch;
+      --time-panel-top-pad: 0.8rem;
+      --time-panel-meta-gap: 1.4rem;
+      --time-panel-top-gap: 0.55rem;
+      --time-panel-scale-gap: 0.45rem;
+      --time-panel-reserve: 9rem;
+      --detail-day-sticky-top: 0px;
+      --page-side-pad: 6rem;
+      --page-mobile-side-pad: 10px;
+      --detail-title-indent: 2.4rem;
+      --detail-observation-time-w: 6ch;
+      --detail-day-gap: 0.48rem;
+      --col-time: 4ch;
+      --detail-table-w: calc(var(--col-time) + var(--col-surf) + var(--col-wind) + var(--col-primary) + var(--col-secondary) + var(--col-extra) + var(--col-extra) + var(--col-extra));
+
+      --wind-pill-w: 8ch;
+      --wind-pill-fill-w: 6ch;
+      --dir-w: 3ch;
+      --swell-h-w: 5ch;
+      --swell-p-w: 3.5ch;
+      --swell-dir-w: 3ch;
+      --extra-value-w: 4ch;
+      --extra-unit-w: 2ch;
+
+      --col-spot: 11ch;
+      --col-surf: 2.5rem;
+      --col-wind: 11.6ch;
+      --col-primary: 12.7ch;
+      --col-secondary: 26ch;
+      --col-extra: calc(var(--extra-value-w) + var(--extra-unit-w) + var(--cluster-gap-w));
+
+      --page-bg: #EFF5FF;
+      --panel-bg: #FFFFFF;
+      --spot-bg: #FFFFFF;
+      --spot-head-bg: #FFFFFF;
+      --spot-row-bg: #FFFFFF;
+      --border-soft: rgba(7, 22, 41, 0.12);
+      --border-strong: rgba(7, 22, 41, 0.22);
+      --text-main: #071629;
+      --text-muted: rgba(7, 22, 41, 0.68);
+      --text-soft: rgba(7, 22, 41, 0.9);
+      --shadow-soft: rgba(7, 22, 41, 0.08);
+      --slider-fill: #071629;
+      --header-bg: #13AFE1;
+      --header-text: #FFFFFF;
+      --title-gap-bottom: 1.6rem;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      font-family: var(--ff-forecast);
+      background: var(--page-bg);
+      color: var(--text-main);
+    }
+
+    body {
+      overflow: hidden;
+    }
+
+    /* 2. Page shell / title */
+    .page-shell {
+      width: min(1480px, calc(100vw - (var(--page-side-pad) * 2)));
+      height: 100vh;
+      margin: 0 auto;
+      padding: 1.15rem 0 var(--time-panel-reserve);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 0;
+    }
+
+    .page-shell--detail {
+      padding-bottom: 1.15rem;
+      grid-template-rows: auto auto;
+      overflow-y: auto;
+      scrollbar-gutter: stable both-edges;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+
+    .page-shell--detail .page-main {
+      display: block;
+    }
+
+    .page-shell--detail .page-head {
+      position: relative;
+      z-index: 20;
+    }
+
+    .page-head {
+      padding: 0 0.15rem var(--title-gap-bottom);
+    }
+
+    .page-nav {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.95rem 1.15rem;
+      border-radius: 1rem;
+      background: var(--header-bg);
+      color: var(--header-text);
+      box-shadow: 0 10px 24px rgba(7, 22, 41, 0.1);
+    }
+
+    .page-main {
+      min-height: 0;
+      position: relative;
+      display: grid;
+    }
+
+    .page-brand,
+    .page-tagline,
+    .menu-button {
+      color: var(--header-text);
+      font-family: var(--ff-forecast);
+    }
+
+    .page-brand {
+      font-size: clamp(1rem, 1.7vw, 1.18rem);
+      font-weight: 350;
+      letter-spacing: -0.01em;
+      justify-self: start;
+    }
+
+    .page-tagline {
+      justify-self: center;
+      text-align: center;
+      font-size: clamp(1rem, 2.2vw, 1.4rem);
+      font-weight: 500;
+      letter-spacing: -0.015em;
+      line-height: 1.1;
+    }
+
+    .page-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.52rem;
+      justify-self: end;
+    }
+
+    .menu-button {
+      appearance: none;
+      border: none;
+      background: transparent;
+      padding: 0;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.24rem;
+      cursor: pointer;
+      width: 1.7rem;
+      height: 1.7rem;
+      min-height: 0;
+      line-height: 0;
+      align-self: center;
+    }
+
+    .menu-button-bar {
+      display: block;
+      width: 1.26rem;
+      height: 2px;
+      border-radius: 999px;
+      background: var(--header-text);
+      flex: 0 0 auto;
+    }
+
+    .menu-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .login-button {
+      appearance: none;
+      border: none;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.9rem;
+      height: 1.9rem;
+      color: var(--header-text);
+      cursor: pointer;
+      align-self: center;
+    }
+
+    .login-button-icon {
+      display: block;
+      width: 1.7rem;
+      height: 1.7rem;
+    }
+
+    .menu-panel {
+      position: absolute;
+      top: calc(100% + 0.45rem);
+      right: 0;
+      width: max-content;
+      min-width: 13.5rem;
+      padding: 0.7rem 0.85rem;
+      border-radius: 0.8rem;
+      background: var(--panel-bg);
+      border: 1px solid var(--border-soft);
+      box-shadow: 0 12px 24px rgba(7, 22, 41, 0.12);
+      z-index: 60;
+    }
+
+    .menu-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.9rem;
+      cursor: pointer;
+      color: var(--text-main);
+    }
+
+    .menu-option-text {
+      display: grid;
+      gap: 0.15rem;
+    }
+
+    .menu-option-title {
+      font-size: 0.92rem;
+      font-weight: 500;
+      line-height: 1.15;
+    }
+
+    .menu-option-note {
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      line-height: 1.1;
+    }
+
+    .menu-option input {
+      width: 1rem;
+      height: 1rem;
+      margin: 0;
+      accent-color: var(--text-main);
+      flex: 0 0 auto;
+    }
+
+    /* 3. Scroll wrappers */
+    .forecast-region {
+      grid-area: 1 / 1;
+      height: 100%;
+      min-height: 0;
+      overflow: auto;
+      padding: 0 0.1rem 0.25rem;
+      scrollbar-gutter: stable both-edges;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+
+    .spot-list {
+      min-width: max-content;
+      display: grid;
+      align-content: start;
+      gap: var(--spot-gap-y);
+      padding-bottom: 0.25rem;
+    }
+
+    /* 4. Spot blocks */
+    .forecast-spot {
+      width: max-content;
+      border-radius: 0.95rem;
+      border: 1px solid var(--border-soft);
+      background: var(--spot-bg);
+      overflow: hidden;
+    }
+
+    .forecast-spot--interactive {
+      cursor: pointer;
+    }
+
+    .forecast-row {
+      display: grid;
+      grid-template-columns:
+        var(--col-spot)
+        var(--col-surf)
+        var(--col-wind)
+        var(--col-primary)
+        var(--col-secondary)
+        var(--col-extra)
+        var(--col-extra)
+        var(--col-extra);
+      width: max-content;
+    }
+
+    .forecast-row--labels {
+      background: var(--spot-head-bg);
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .forecast-row--values {
+      background: var(--spot-row-bg);
+    }
+
+    /* 5. Repeated small headers */
+    .forecast-label {
+      padding:
+        calc(var(--pad-cell-y) * 0.8)
+        var(--pad-cell-x)
+        calc(var(--pad-cell-y) * 0.8 - var(--header-gap-y));
+      font-size: var(--fs-label);
+      line-height: 1.05;
+      font-weight: 400;
+      color: var(--text-soft);
+      white-space: nowrap;
+      border-right: 1px solid var(--border-soft);
+    }
+
+    /* 6. Common table cell rules */
+    .forecast-cell,
+    .forecast-label {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      font-family: var(--ff-forecast);
+    }
+
+    .forecast-cell {
+      padding: var(--pad-cell-y) var(--pad-cell-x);
+      font-size: var(--fs-base);
+      line-height: var(--lh-forecast);
+      font-variant-numeric: tabular-nums;
+      color: var(--text-main);
+      border-right: 1px solid var(--border-soft);
+    }
+
+    .forecast-label:last-child,
+    .forecast-cell:last-child {
+      border-right: none;
+    }
+
+    .forecast-cell--spot,
+    .forecast-label--spot {
+      padding-left: 0.55rem;
+      justify-content: flex-start;
+    }
+
+    .forecast-cell--spot {
+      width: 100%;
+      justify-self: start;
+      font-weight: 500;
+      text-overflow: ellipsis;
+    }
+
+    .forecast-cell--center,
+    .forecast-label--center {
+      justify-content: center;
+    }
+
+    .forecast-unit {
+      font-size: var(--fs-unit);
+      font-weight: 400;
+      color: var(--text-muted);
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+
+    .forecast-value-strong {
+      font-weight: 400;
+    }
+
+    .forecast-value-faint {
+      opacity: 0.55;
+    }
+
+    /* 7. Surf */
+    .forecast-cell--surf {
+      width: 100%;
+      justify-self: center;
+      justify-content: center;
+      padding-left: calc(var(--pad-cell-x) * 0.6);
+      padding-right: calc(var(--pad-cell-x) * 0.6);
+    }
+
+    .forecast-signal-wrap {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      pointer-events: none;
+    }
+
+    .forecast-signal-symbol {
+      display: block;
+      width: 1em;
+      height: 1.26em;
+      flex: 0 0 auto;
+      user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none;
+    }
+
+    /* 8. Wind */
+    .forecast-cell--wind {
+      justify-content: center;
+      padding-left: calc(var(--pad-cell-x) * 0.75);
+      padding-right: calc(var(--pad-cell-x) * 0.75);
+    }
+
+    .forecast-wind {
+      display: grid;
+      grid-template-columns: var(--wind-pill-w) var(--dir-w);
+      column-gap: var(--cluster-gap-w);
+      align-items: center;
+      width: max-content;
+      max-width: max-content;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .forecast-wind-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      width: var(--wind-pill-w);
+      min-width: var(--wind-pill-w);
+      justify-self: end;
+    }
+
+    .forecast-wind-pill-fill {
+      display: inline-flex;
+      align-items: baseline;
+      justify-content: flex-end;
+      width: var(--wind-pill-fill-w);
+      min-width: var(--wind-pill-fill-w);
+      padding: var(--pill-pad-y) var(--wind-pill-pad-x);
+      border-radius: 0.45rem;
+      color: var(--text-main);
+      text-align: right;
+      overflow: hidden;
+    }
+
+    .forecast-wind-pill-text {
+      display: inline-flex;
+      align-items: baseline;
+      justify-content: flex-end;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .forecast-wind-value {
+      overflow: hidden;
+      text-overflow: clip;
+    }
+
+    .forecast-wind-gap {
+      flex: 0 0 auto;
+    }
+
+    .forecast-wind-dir {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-start;
+      width: var(--dir-w);
+      min-width: var(--dir-w);
+      justify-self: start;
+    }
+
+    .forecast-wind-bracket {
+      color: var(--text-main);
+    }
+
+    .forecast-wind-bracket-muted {
+      color: var(--text-muted);
+    }
+
+    .forecast-direction-degrees,
+    .forecast-direction-text {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-start;
+      width: 100%;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-main);
+    }
+
+    .forecast-direction-degrees--empty,
+    .forecast-direction-text--empty {
+      color: rgba(7, 22, 41, 0.35);
+    }
+
+    .forecast-direction-text--degrees,
+    .forecast-direction-text--compass {
+      font-size: 0.72em;
+      letter-spacing: -0.04em;
+    }
+
+    .forecast-direction-text--compass {
+      font-size: 0.74em;
+      letter-spacing: -0.02em;
+    }
+
+    /* 9. Swell */
+    .forecast-cell--swell {
+      justify-content: center;
+    }
+
+    .forecast-swell-system {
+      display: grid;
+      grid-template-columns: var(--swell-h-w) var(--swell-p-w) var(--swell-dir-w);
+      column-gap: var(--cluster-gap-w);
+      align-items: center;
+      width: max-content;
+      max-width: max-content;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .forecast-swell-value {
+      min-width: 0;
+      max-width: 100%;
+      display: inline-flex;
+      align-items: baseline;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .forecast-swell-value--height {
+      grid-column: 1;
+      justify-self: end;
+      text-align: right;
+    }
+
+    .forecast-swell-value--period {
+      grid-column: 2;
+      justify-self: center;
+      text-align: center;
+    }
+
+    .forecast-swell-dir {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-start;
+      grid-column: 3;
+      justify-self: start;
+    }
+
+    /* 10. Secondary swell wrapper */
+    .forecast-cell--secondary {
+      justify-content: center;
+    }
+
+    .forecast-secondary {
+      display: grid;
+      grid-template-columns: max-content max-content;
+      column-gap: var(--cluster-gap-w);
+      width: max-content;
+    }
+
+    .forecast-secondary-slot {
+      display: flex;
+      justify-content: flex-start;
+      min-width: 0;
+    }
+
+    .forecast-swell-system--empty,
+    .forecast-wind--empty {
+      opacity: 0.36;
+    }
+
+    /* 11. Nedbør / Luft / Sky */
+    .forecast-cell--extra {
+      justify-content: center;
+      padding-left: calc(var(--pad-cell-x) * 0.72);
+      padding-right: calc(var(--pad-cell-x) * 0.72);
+    }
+
+    .forecast-extra {
+      display: grid;
+      align-items: baseline;
+      justify-content: center;
+      grid-template-columns: var(--extra-value-w) var(--extra-unit-w);
+      column-gap: var(--gap-tight);
+      width: max-content;
+      max-width: max-content;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .forecast-extra-value {
+      width: var(--extra-value-w);
+      justify-self: end;
+      text-align: right;
+    }
+
+    .forecast-extra .forecast-unit {
+      width: var(--extra-unit-w);
+      justify-self: start;
+      text-align: left;
+    }
+
+    /* Shared arrows */
+    .forecast-arrow,
+    .forecast-arrow-empty {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.08em;
+      height: 1.08em;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+
+    .forecast-arrow {
+      transform-origin: center;
+      color: var(--text-main);
+    }
+
+    .forecast-arrow-icon {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .forecast-arrow--wind .forecast-arrow-icon {
+      width: 1.42em;
+      height: 0.92em;
+    }
+
+    .forecast-arrow--swell {
+      position: relative;
+      top: -0.035em;
+    }
+
+    .forecast-arrow--swell .forecast-arrow-icon {
+      width: 0.94em;
+      height: 0.94em;
+    }
+
+    .forecast-arrow-empty {
+      color: rgba(7, 22, 41, 0.35);
+    }
+
+    .detail-view {
+      grid-area: 1 / 1;
+      height: 100%;
+      min-height: 0;
+      overflow: auto;
+      padding: 0 0.15rem 1.5rem;
+      scrollbar-gutter: stable both-edges;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+
+    .page-shell--detail .detail-view {
+      height: auto;
+      overflow: visible;
+      padding-bottom: 1.15rem;
+    }
+
+    .detail-topbar {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      margin: 0;
+      min-width: 0;
+      grid-area: top;
+    }
+
+    .detail-sticky {
+      position: sticky;
+      top: 0;
+      z-index: 12;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "top top"
+        "day controls";
+      align-items: center;
+      align-content: start;
+      column-gap: 0.6rem;
+      row-gap: 0.5rem;
+      width: min(100%, var(--detail-table-w));
+      max-width: 100%;
+      padding: 0;
+      background: var(--page-bg);
+    }
+
+    .detail-sticky[data-day-indicator-active="true"] {
+      padding-bottom: var(--detail-day-gap);
+    }
+
+    .detail-sticky::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 100%;
+      height: 10rem;
+      background: var(--page-bg);
+      pointer-events: none;
+    }
+
+    .detail-back {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      color: var(--text-main);
+      background: var(--panel-bg);
+      text-decoration: none;
+      font-size: 1rem;
+      line-height: 1;
+    }
+
+    .detail-spot-title {
+      margin: 0;
+      font-size: 1.02rem;
+      font-weight: 550;
+      line-height: 1.1;
+      color: var(--text-main);
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .detail-tabs {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      width: max-content;
+      padding: 0.22rem;
+      border-radius: 999px;
+      background: rgba(7, 22, 41, 0.05);
+      flex: 0 0 auto;
+      margin-left: auto;
+    }
+
+    .detail-tab {
+      appearance: none;
+      border: none;
+      background: transparent;
+      font: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem 0.62rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      line-height: 1;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .detail-tab:focus-visible {
+      outline: 2px solid rgba(7, 22, 41, 0.25);
+      outline-offset: 2px;
+    }
+
+    .detail-tab-label--mobile {
+      display: none;
+    }
+
+    .detail-tab-label--mobile-short {
+      display: none;
+    }
+
+    .detail-tab--active {
+      background: var(--panel-bg);
+      color: var(--text-main);
+      box-shadow: 0 2px 8px rgba(7, 22, 41, 0.08);
+    }
+
+    .detail-controls {
+      grid-area: controls;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.7rem 1.25rem;
+      padding-left: var(--detail-title-indent);
+      align-self: start;
+    }
+
+    .detail-day-indicator {
+      grid-area: day;
+      min-width: 0;
+      width: min(100%, var(--detail-table-w));
+      justify-self: start;
+      font-size: 0.92rem;
+      font-weight: 550;
+      line-height: 1.2;
+      color: var(--text-main);
+      padding: 0 0 0 var(--detail-title-indent);
+      background: var(--page-bg);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      position: relative;
+      z-index: 2;
+      align-self: start;
+    }
+
+    .detail-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-width: 0;
+      font-size: 0.85rem;
+      line-height: 1.1;
+      color: var(--text-main);
+    }
+
+    .detail-control-label {
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .detail-control-select {
+      min-width: 9.8rem;
+      height: 2rem;
+      padding: 0 2rem 0 0.7rem;
+      border: 1px solid var(--border-soft);
+      border-radius: 999px;
+      background-color: var(--panel-bg);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23071629' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.78rem center;
+      background-size: 0.72rem 0.48rem;
+      color: var(--text-main);
+      font: inherit;
+      -webkit-appearance: none;
+      appearance: none;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(7, 22, 41, 0.05);
+    }
+
+    .detail-settings-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      flex: 0 0 auto;
+    }
+
+    .detail-settings-button {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--text-main);
+      width: 2.5rem;
+      height: 2.5rem;
+      padding: 0;
+      margin: 0;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .detail-settings-button-icon {
+      display: block;
+      width: 1.72rem;
+      height: 1.72rem;
+      object-fit: contain;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .detail-settings-panel {
+      position: absolute;
+      top: calc(100% + 0.45rem);
+      right: 0;
+      width: max-content;
+      min-width: 13.5rem;
+      padding: 0.7rem 0.85rem;
+      border-radius: 0.8rem;
+      background: var(--panel-bg);
+      border: 1px solid var(--border-soft);
+      box-shadow: 0 12px 24px rgba(7, 22, 41, 0.12);
+      z-index: 32;
+    }
+
+    .detail-settings-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.9rem;
+      cursor: pointer;
+      color: var(--text-main);
+    }
+
+    .detail-settings-option-title {
+      font-size: 0.92rem;
+      font-weight: 500;
+      line-height: 1.15;
+      white-space: nowrap;
+    }
+
+    .detail-settings-option input[type="checkbox"]:not(.detail-settings-switch-input) {
+      width: 1rem;
+      height: 1rem;
+      margin: 0;
+      accent-color: var(--text-main);
+      flex: 0 0 auto;
+    }
+
+    .detail-settings-switch {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      flex: 0 0 auto;
+    }
+
+    .detail-settings-switch-input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .detail-settings-switch-ui {
+      position: relative;
+      display: inline-flex;
+      width: 2.3rem;
+      height: 1.34rem;
+      border-radius: 999px;
+      background: rgba(7, 22, 41, 0.14);
+      transition: background 160ms ease;
+      box-shadow: inset 0 0 0 1px rgba(7, 22, 41, 0.06);
+    }
+
+    .detail-settings-switch-ui::after {
+      content: "";
+      position: absolute;
+      top: 0.14rem;
+      left: 0.14rem;
+      width: 1.06rem;
+      height: 1.06rem;
+      border-radius: 999px;
+      background: #FFFFFF;
+      box-shadow: 0 1px 4px rgba(7, 22, 41, 0.18);
+      transition: transform 160ms ease;
+    }
+
+    .detail-settings-switch-input:checked + .detail-settings-switch-ui {
+      background: var(--text-main);
+    }
+
+    .detail-settings-switch-input:checked + .detail-settings-switch-ui::after {
+      transform: translateX(0.96rem);
+    }
+
+    .detail-settings-select {
+      min-width: 6.2rem;
+      height: 1.9rem;
+      padding: 0 1.85rem 0 0.68rem;
+      border: 1px solid var(--border-soft);
+      border-radius: 999px;
+      background-color: var(--panel-bg);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23071629' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.72rem center;
+      background-size: 0.68rem 0.44rem;
+      color: var(--text-main);
+      font: inherit;
+      font-size: 0.82rem;
+      line-height: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(7, 22, 41, 0.05);
+    }
+
+    .detail-content {
+      display: grid;
+      align-content: start;
+      gap: 0;
+      padding-bottom: 1.4rem;
+    }
+
+    .detail-day {
+      display: grid;
+      align-content: start;
+      gap: var(--detail-day-gap);
+      padding-top: 2rem;
+      min-width: 0;
+    }
+
+    .detail-day-title {
+      margin: 0;
+      width: min(100%, var(--detail-table-w));
+      justify-self: start;
+      padding-left: var(--detail-title-indent);
+      font-size: 0.92rem;
+      font-weight: 550;
+      color: var(--text-main);
+      line-height: 1.2;
+    }
+
+    .detail-day[data-sticky-active="true"] .detail-day-title {
+      visibility: hidden;
+    }
+
+    .detail-day-table-scroll {
+      width: min(100%, var(--detail-table-w));
+      min-width: 0;
+      justify-self: start;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-gutter: stable;
+    }
+
+    .detail-day-table {
+      width: max-content;
+      border-radius: 0.95rem;
+      border: 1px solid var(--border-soft);
+      background: var(--spot-bg);
+      box-shadow: 0 8px 18px var(--shadow-soft);
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .forecast-cell--time,
+    .forecast-label--time {
+      justify-content: center;
+    }
+
+    .forecast-cell--time {
+      font-weight: 500;
+    }
+
+    .detail-day-table .forecast-row {
+      grid-template-columns:
+        var(--col-time)
+        var(--col-surf)
+        var(--col-wind)
+        var(--col-primary)
+        var(--col-secondary)
+        var(--col-extra)
+        var(--col-extra)
+        var(--col-extra);
+    }
+
+    .detail-support {
+      display: grid;
+      gap: 0.6rem;
+      padding-top: 2rem;
+      width: min(100%, var(--detail-table-w));
+      min-width: 0;
+      justify-self: start;
+      max-width: none;
+      cursor: pointer;
+    }
+
+    .detail-tide-panel {
+      display: grid;
+      gap: 0;
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      overflow: visible;
+    }
+
+    .detail-tide-head {
+      display: grid;
+      gap: 0.4rem;
+      padding-left: var(--detail-title-indent);
+    }
+
+    .detail-tide-title-wrap {
+      display: grid;
+      gap: 0.16rem;
+    }
+
+    .detail-tide-title {
+      margin: 0;
+      font-size: 0.92rem;
+      font-weight: 560;
+      line-height: 1.1;
+      color: var(--text-main);
+    }
+
+    .detail-tide-title-location {
+      font-size: 0.8em;
+      font-weight: 400;
+      color: var(--text-muted);
+    }
+
+    .detail-tide-meta {
+      font-size: 0.76rem;
+      line-height: 1.2;
+      color: var(--text-muted);
+    }
+
+    .detail-tide-legend {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.85rem;
+      flex-wrap: wrap;
+    }
+
+    .detail-tide-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.36rem;
+      font-size: 0.77rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .detail-tide-legend-dot {
+      display: inline-block;
+      width: 0.52rem;
+      height: 0.52rem;
+      border-radius: 999px;
+      background: currentColor;
+      flex: 0 0 auto;
+    }
+
+    .detail-tide-layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.45rem;
+      align-items: stretch;
+      min-width: 0;
+    }
+
+    .detail-tide-graph-wrap {
+      min-width: 0;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .detail-tide-graph {
+      width: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .detail-tide-graph svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .detail-tide-mobile-events {
+      display: none;
+    }
+
+    .detail-tide-mobile-table {
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+      width: max-content;
+    }
+
+    .detail-tide-mobile-row {
+      font-size: 0.86rem;
+      line-height: 1.34;
+      color: var(--text-main);
+    }
+
+    .detail-tide-mobile-label,
+    .detail-tide-mobile-time,
+    .detail-tide-mobile-value {
+      padding: 0;
+      white-space: nowrap;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .detail-tide-mobile-label {
+      font-weight: 400;
+      padding-right: 0.45rem;
+    }
+
+    .detail-tide-mobile-time {
+      font-weight: 400;
+      padding-right: 0.35rem;
+    }
+
+    .detail-tide-mobile-value {
+      padding-right: 0.8rem;
+    }
+
+    .detail-tide-mobile-row > :last-child {
+      padding-right: 0;
+    }
+
+    .detail-tide-mobile-value-main {
+      font-weight: 500;
+    }
+
+    .detail-tide-side {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+      padding-top: 0.8rem;
+      padding-left: var(--detail-title-indent);
+      border-top: none;
+      border-left: none;
+      min-width: 0;
+    }
+
+    .detail-light-stack {
+      display: contents;
+    }
+
+    .detail-side-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      font-size: 0.88rem;
+      line-height: 1.24;
+      color: var(--text-main);
+    }
+
+    .detail-side-label {
+      color: var(--text-main);
+      font-weight: 400;
+      white-space: nowrap;
+    }
+
+    .detail-side-copy {
+      min-width: 0;
+    }
+
+    .detail-side-note {
+      color: var(--text-muted);
+      font-weight: 400;
+      white-space: nowrap;
+    }
+
+    .detail-side-divider {
+      display: none;
+    }
+
+    .detail-sea-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      font-size: 0.88rem;
+      line-height: 1.3;
+      color: var(--text-main);
+    }
+
+    .detail-sea-line span {
+      display: inline-block;
+      font-size: 0.88rem;
+      line-height: 1.3;
+      color: var(--text-main);
+    }
+
+    .detail-sea-copy {
+      min-width: 0;
+    }
+
+    .detail-side-emphasis {
+      font-weight: 600;
+    }
+
+    .detail-tide-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 12rem;
+      padding: 1rem;
+      border-radius: 0.82rem;
+      background: rgba(239, 245, 255, 0.85);
+      color: var(--text-muted);
+      text-align: center;
+      font-size: 0.88rem;
+      line-height: 1.3;
+    }
+
+    .detail-info-card {
+      padding: 0.78rem 0.9rem 0.82rem;
+      border-radius: 0.85rem;
+      background: var(--panel-bg);
+      border: 1px solid var(--border-soft);
+      box-shadow: 0 6px 16px rgba(7, 22, 41, 0.06);
+    }
+
+    .detail-info-title {
+      margin: 0 0 0.35rem;
+      font-size: 0.8rem;
+      font-weight: 550;
+      color: var(--text-main);
+      line-height: 1.1;
+    }
+
+    .detail-light-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.8rem;
+      font-size: 0.88rem;
+      line-height: 1.2;
+      color: var(--text-main);
+    }
+
+    .detail-light-label {
+      color: var(--text-muted);
+    }
+
+    .detail-tide-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.84rem;
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .detail-tide-table th,
+    .detail-tide-table td {
+      padding: 0.26rem 0;
+      text-align: left;
+      border-bottom: 1px solid rgba(7, 22, 41, 0.08);
+      color: var(--text-main);
+    }
+
+    .detail-tide-table th {
+      font-size: 0.74rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .detail-tide-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .detail-empty-note {
+      font-size: 0.84rem;
+      color: var(--text-muted);
+      line-height: 1.25;
+    }
+
+    .detail-observations {
+      width: min(100%, var(--detail-table-w));
+      display: grid;
+      align-content: start;
+      gap: 0.8rem;
+      padding-top: 0.1rem;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-gutter: stable;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .detail-observation-series {
+      display: flex;
+      align-items: flex-start;
+      flex-wrap: nowrap;
+      gap: 0.8rem;
+      width: max-content;
+      min-width: 100%;
+    }
+
+    .detail-observation-series-card {
+      display: grid;
+      gap: 0.35rem;
+      justify-self: start;
+      width: max-content;
+      max-width: 100%;
+    }
+
+    .detail-observation-series-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 0.55rem;
+      width: 100%;
+      padding-top: 2rem;
+      padding-left: 0;
+      text-align: center;
+    }
+
+    .detail-observation-series-title {
+      margin: 0;
+      font-size: 0.8rem;
+      font-weight: 550;
+      line-height: 1.15;
+      color: var(--text-main);
+    }
+
+    .detail-observation-series-meta {
+      font-size: 0.72rem;
+      line-height: 1.15;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .detail-observation-table-scroll {
+      width: max-content;
+      max-width: min(100%, var(--detail-table-w));
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-gutter: stable;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .detail-observation-table {
+      width: max-content;
+      border-radius: 0.95rem;
+      border: 1px solid var(--border-soft);
+      background: var(--spot-bg);
+      box-shadow: 0 8px 18px var(--shadow-soft);
+      overflow: hidden;
+    }
+
+    .detail-observation-table .forecast-row {
+      grid-template-columns:
+        var(--detail-observation-time-w)
+        var(--col-wind);
+    }
+
+    .detail-observation-table .forecast-row--values + .forecast-row--values {
+      border-top: 1px solid var(--border-soft);
+    }
+
+    .detail-observation-empty {
+      padding-left: var(--detail-title-indent);
+    }
+
+    /* 12. Responsive behavior */
+    .time-panel {
+      position: fixed;
+      left: 50%;
+      bottom: 0.45rem;
+      transform: translateX(-50%);
+      width: min(1480px, calc(100vw - (var(--page-side-pad) * 2)));
+      padding: 0;
+      border-radius: 1.08rem;
+      background: var(--page-bg);
+      font-family: var(--ff-forecast);
+      z-index: 20;
+    }
+
+    .time-panel-inner {
+      padding: var(--time-panel-top-pad) 0.8rem 0.8rem;
+      border-radius: 0.92rem;
+      background: var(--page-bg);
+      border: none;
+      box-shadow: none;
+    }
+
+    .time-panel-meta {
+      margin-bottom: var(--time-panel-meta-gap);
+      font-size: 0.68rem;
+      line-height: 1.15;
+      color: var(--text-muted);
+      font-weight: 400;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .time-panel-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: flex-start;
+      margin-bottom: var(--time-panel-top-gap);
+    }
+
+    .time-value {
+      font-family: var(--ff-forecast);
+      font-size: clamp(0.82rem, 1.18vw, 0.94rem);
+      line-height: 1.05;
+      font-weight: 500;
+      color: var(--text-main);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .time-range {
+      width: 100%;
+      margin: 0;
+      accent-color: var(--slider-fill);
+      font-family: var(--ff-forecast);
+    }
+
+    .time-scale {
+      display: flex;
+      justify-content: space-between;
+      margin-top: var(--time-panel-scale-gap);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .empty-state {
+      padding: 1.3rem 1.4rem;
+      border-radius: 0.95rem;
+      background: var(--panel-bg);
+      border: 1px solid var(--border-soft);
+      color: var(--text-soft);
+      font-size: 0.98rem;
+    }
+
+    @media (max-width: 720px) {
+      .detail-sticky {
+        align-items: center;
+      }
+
+      .page-shell {
+        --detail-title-indent: calc(1.46rem + 0.36rem);
+      }
+
+      #overview-view {
+        --overview-mobile-scale: 0.84;
+        --fs-base: calc(1rem * var(--overview-mobile-scale));
+        --fs-unit: calc(0.8em * var(--overview-mobile-scale));
+        --fs-label: calc(0.8rem * var(--overview-mobile-scale));
+        --pad-cell-y: calc(0.45rem * var(--overview-mobile-scale));
+        --pad-cell-x: calc(0.7rem * var(--overview-mobile-scale));
+        --pill-pad-y: calc(0.28em * var(--overview-mobile-scale));
+        --pill-pad-x: calc(0.5em * var(--overview-mobile-scale));
+        --wind-pill-pad-x: calc(0.18em * var(--overview-mobile-scale));
+        --gap-tight: calc(0.1rem * var(--overview-mobile-scale));
+        --cluster-gap-w: calc(0.6ch * var(--overview-mobile-scale));
+        --wind-pill-w: calc(8.8ch * var(--overview-mobile-scale));
+        --wind-pill-fill-w: calc(7.2ch * var(--overview-mobile-scale));
+        --dir-w: calc(3ch * var(--overview-mobile-scale));
+        --swell-h-w: calc(5ch * var(--overview-mobile-scale));
+        --swell-p-w: calc(3.5ch * var(--overview-mobile-scale));
+        --swell-dir-w: calc(3ch * var(--overview-mobile-scale));
+        --extra-value-w: calc(4ch * var(--overview-mobile-scale));
+        --extra-unit-w: calc(2ch * var(--overview-mobile-scale));
+        --col-spot: calc(11ch * var(--overview-mobile-scale));
+        --col-surf: calc(2.5rem * var(--overview-mobile-scale));
+        --col-wind: calc(12.4ch * var(--overview-mobile-scale));
+        --col-primary: calc(12.7ch * var(--overview-mobile-scale));
+        --col-secondary: calc(26ch * var(--overview-mobile-scale));
+        --col-extra: calc(var(--extra-value-w) + var(--extra-unit-w) + var(--cluster-gap-w));
+      }
+
+      .page-shell {
+        width: calc(100vw - (var(--page-mobile-side-pad) * 2));
+        padding-bottom: var(--time-panel-reserve);
+      }
+
+      .page-shell.page-shell--detail {
+        padding-bottom: 1.15rem;
+      }
+
+      .page-head {
+        margin-inline: calc(var(--page-mobile-side-pad) * -1);
+        padding-bottom: 1.35rem;
+      }
+
+      .page-nav {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-areas: "brand tagline menu";
+        gap: 0.45rem;
+        padding: 0.9rem 0.75rem;
+        border-radius: 0;
+      }
+
+      .page-brand {
+        grid-area: brand;
+        font-size: 0.86rem;
+        letter-spacing: -0.015em;
+      }
+
+      .page-tagline {
+        grid-area: tagline;
+        min-width: 0;
+        font-size: 0.82rem;
+        font-weight: 480;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .page-actions {
+        grid-area: menu;
+        gap: 0.4rem;
+      }
+
+      .menu-button {
+        gap: 0.2rem;
+        width: 1.55rem;
+        height: 1.55rem;
+      }
+
+      .menu-button-bar {
+        width: 1.08rem;
+      }
+
+      .login-button {
+        width: 1.7rem;
+        height: 1.7rem;
+      }
+
+      .login-button-icon {
+        width: 1.5rem;
+        height: 1.5rem;
+      }
+
+      .menu-panel {
+        right: 0;
+        min-width: min(15rem, calc(100vw - 2rem));
+      }
+
+      .time-panel {
+        --time-panel-top-pad: 0.75rem;
+        --time-panel-meta-gap: 1.32rem;
+        --time-panel-top-gap: 0.48rem;
+        --time-panel-scale-gap: 0.38rem;
+        width: calc(100vw - (var(--page-mobile-side-pad) * 2));
+        border-radius: 0.96rem;
+      }
+
+      .time-panel-inner {
+        border-radius: 0.78rem;
+      }
+
+      .detail-view {
+        padding-right: 0.1rem;
+        padding-left: 0.1rem;
+        padding-bottom: 0.35rem;
+      }
+
+      .detail-tabs {
+        max-width: 100%;
+        gap: 0.18rem;
+        padding: 0.14rem;
+        margin-left: 0;
+      }
+
+      .detail-topbar {
+        gap: 0.36rem;
+      }
+
+      .detail-back {
+        width: 1.46rem;
+        height: 1.46rem;
+        font-size: 0.92rem;
+      }
+
+      .detail-spot-title {
+        font-size: 0.92rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .detail-tab {
+        padding: 0.28rem 0.4rem;
+        font-size: 0.73rem;
+      }
+
+      .detail-controls {
+        gap: 0.5rem;
+        justify-content: flex-end;
+        justify-self: end;
+        flex-wrap: nowrap;
+        padding-left: 0;
+        width: auto;
+        max-width: 100%;
+        align-self: center;
+      }
+
+      .detail-day-indicator {
+        display: flex;
+        align-items: center;
+        min-height: 2.3rem;
+        line-height: 1;
+        padding-top: 0;
+        padding-bottom: 0;
+        align-self: center;
+      }
+
+      .detail-control {
+        font-size: 0.82rem;
+      }
+
+      .detail-control-label {
+        font-size: 0.78rem;
+      }
+
+      .detail-control-select {
+        min-width: 8.8rem;
+      }
+
+      .detail-settings-button {
+        width: 2.3rem;
+        height: 2.3rem;
+      }
+
+      .detail-settings-button-icon {
+        width: 1.52rem;
+        height: 1.52rem;
+      }
+
+      .detail-settings-panel {
+        min-width: min(14rem, calc(100vw - 2rem));
+      }
+
+      .detail-observation-series-head,
+      .detail-observation-empty {
+        padding-left: 0;
+      }
+
+      .detail-tab-label--desktop {
+        display: none;
+      }
+
+      .detail-tab-label--mobile {
+        display: inline;
+      }
+
+      .detail-tab-label--mobile-short {
+        display: inline;
+      }
+
+      .detail-tab-label--desktop.detail-tab-label--desktop-primary {
+        display: none;
+      }
+
+      .detail-tab-label--mobile.detail-tab-label--mobile-primary {
+        display: none;
+      }
+
+      .detail-tide-layout {
+        grid-template-columns: 1fr;
+        gap: 0.85rem;
+      }
+
+      .detail-tide-side {
+        display: grid;
+        align-content: start;
+        padding-top: 0.9rem;
+        gap: 0.8rem;
+      }
+
+      .detail-tide-panel {
+        padding: 0;
+      }
+
+      .detail-day-table-scroll {
+        width: 100%;
+        margin-inline: -0.02rem;
+        padding-bottom: 0.15rem;
+      }
+
+      .detail-support {
+        width: 100%;
+        padding-top: 2rem;
+      }
+
+      .detail-tide-title {
+        font-size: 0.88rem;
+      }
+
+      .detail-tide-mobile-events {
+        display: grid;
+        gap: 0.28rem;
+        padding-top: 0.45rem;
+        padding-left: var(--detail-title-indent);
+      }
+
+      .detail-tide-mobile-table,
+      .detail-tide-mobile-label,
+      .detail-tide-mobile-time,
+      .detail-tide-mobile-value {
+        font-size: 0.72rem;
+      }
+
+      .detail-tide-mobile-label {
+        padding-right: 0.35rem;
+      }
+
+      .detail-tide-mobile-time {
+        padding-right: 0.28rem;
+      }
+
+      .detail-tide-mobile-value {
+        padding-right: 0.55rem;
+      }
+
+      .detail-tide-legend {
+        gap: 0.6rem;
+      }
+
+      .detail-tide-legend-item {
+        font-size: 0.72rem;
+      }
+
+      .time-panel-meta {
+        font-size: 0.54rem;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        overflow-wrap: anywhere;
+        word-break: normal;
+        max-width: 100%;
+        line-height: 1.18;
+      }
+
+      .detail-side-line,
+      .detail-side-copy,
+      .detail-sea-line,
+      .detail-sea-line span,
+      .detail-sea-copy {
+        font-size: 0.82rem;
+      }
+
+      .detail-tide-mobile-row,
+      .detail-tide-mobile-time,
+      .detail-tide-mobile-value,
+      .detail-tide-mobile-label,
+      .detail-tide-mobile-table {
+        font-size: 0.72rem;
+      }
+    }
+
+    @media (min-width: 721px) {
+      .detail-sticky {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+          "top controls"
+          "day day";
+        align-items: center;
+        column-gap: 0.9rem;
+        row-gap: 0.35rem;
+      }
+
+      .detail-controls {
+        grid-area: controls;
+        justify-self: end;
+        flex-wrap: nowrap;
+        gap: 0.55rem;
+        padding-left: 0;
+      }
+
+      .detail-day--expanded .detail-day-title {
+        position: static;
+        top: auto;
+        z-index: auto;
+        padding-top: 0;
+        padding-bottom: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .detail-control {
+        font-size: 0.82rem;
+      }
+
+      .detail-control-select {
+        min-width: 8.4rem;
+      }
+
+      .detail-settings-button {
+        width: 2.15rem;
+        height: 2.15rem;
+      }
+
+      .detail-settings-button-icon {
+        width: 1.42rem;
+        height: 1.42rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="page-head">
+      <div class="page-nav">
+        <div class="page-brand">meldinga.no</div>
+        <div class="page-tagline">Bølgevarsel for norskekysten</div>
+        <div class="page-actions">
+          <button class="login-button" type="button" aria-label="Logg inn">
+            <svg class="login-button-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/>
+              <circle cx="12" cy="9" r="3.6" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M6.4 18.1c1.7-2.3 3.5-3.4 5.6-3.4s3.9 1.1 5.6 3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <div class="menu-wrap">
+            <button class="menu-button" id="menu-button" type="button" aria-label="Meny" aria-expanded="false">
+              <span class="menu-button-bar"></span>
+              <span class="menu-button-bar"></span>
+              <span class="menu-button-bar"></span>
+            </button>
+            <div class="menu-panel" id="menu-panel" hidden>
+              <label class="menu-option" for="wind-color-toggle">
+                <span class="menu-option-text">
+                  <span class="menu-option-title">Farge vind på</span>
+                  <span class="menu-option-note">100% opacity</span>
+                </span>
+                <input id="wind-color-toggle" type="checkbox" checked>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="page-main">
+      <section class="forecast-region" id="overview-view">
+        <div class="spot-list" id="spot-list"></div>
+      </section>
+      <section class="detail-view" id="detail-view" hidden>
+        <div class="detail-sticky" id="detail-sticky">
+          <div class="detail-topbar">
+            <a class="detail-back" id="detail-back" href="#" aria-label="Tilbake">&lt;</a>
+            <h2 class="detail-spot-title" id="detail-spot-title">--</h2>
+            <div class="detail-tabs" aria-label="Faner" role="tablist">
+              <button class="detail-tab detail-tab--active" type="button" data-detail-tab="forecast" aria-pressed="true">
+                <span class="detail-tab-label--desktop detail-tab-label--desktop-primary">Bølgevarsel</span>
+                <span class="detail-tab-label--mobile detail-tab-label--mobile-primary">Bølgevarsel</span>
+                <span class="detail-tab-label--mobile-short">Varsel</span>
+              </button>
+              <button class="detail-tab" type="button" data-detail-tab="observations" aria-pressed="false">
+                <span class="detail-tab-label--desktop">Observasjoner</span>
+                <span class="detail-tab-label--mobile">Observasjoner</span>
+              </button>
+              <button class="detail-tab" type="button" data-detail-tab="statistics" aria-pressed="false">Statistikk</button>
+            </div>
+          </div>
+          <div class="detail-controls" id="detail-controls" aria-label="Vindvalg">
+            <label class="detail-control" id="detail-wind-target-control" for="detail-wind-target" hidden>
+              <span class="detail-control-label">Vind for</span>
+              <select class="detail-control-select" id="detail-wind-target"></select>
+            </label>
+            <div class="detail-settings-wrap">
+              <button class="detail-settings-button" id="detail-settings-button" type="button" aria-label="Vindinnstillinger" aria-expanded="false">
+                <img class="detail-settings-button-icon" src="symbols/settings.png" alt="" aria-hidden="true" draggable="false">
+              </button>
+              <div class="detail-settings-panel" id="detail-settings-panel" hidden>
+                <label class="detail-settings-option" for="detail-wind-color-toggle">
+                  <span class="detail-settings-option-title">Vindfarger</span>
+                  <span class="detail-settings-switch">
+                    <input class="detail-settings-switch-input" id="detail-wind-color-toggle" type="checkbox" checked>
+                    <span class="detail-settings-switch-ui" aria-hidden="true"></span>
+                  </span>
+                </label>
+                <label class="detail-settings-option" for="detail-wind-direction-mode">
+                  <span class="detail-settings-option-title">Vindretning</span>
+                  <select class="detail-settings-select" id="detail-wind-direction-mode">
+                    <option value="arrow" selected>Pil</option>
+                    <option value="compass">Kompass</option>
+                    <option value="degrees">Grader</option>
+                  </select>
+                </label>
+                <label class="detail-settings-option" for="detail-wave-direction-mode">
+                  <span class="detail-settings-option-title">Bølgeretning</span>
+                  <select class="detail-settings-select" id="detail-wave-direction-mode">
+                    <option value="arrow" selected>Pil</option>
+                    <option value="compass">Kompass</option>
+                    <option value="degrees">Grader</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="detail-day-indicator" id="detail-day-indicator" hidden></div>
+        </div>
+        <div class="detail-content" id="detail-content"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="time-panel" id="time-panel">
+    <div class="time-panel-inner">
+      <div class="time-panel-meta" id="time-panel-meta" hidden></div>
+      <div class="time-panel-top">
+        <div class="time-value" id="time-value">--</div>
+      </div>
+      <input class="time-range" id="time-range" type="range" min="0" max="0" step="1" value="0">
+      <div class="time-scale">
+        <span id="time-start">--</span>
+        <span id="time-end">--</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="./tide-data.js"></script>
+  <script src="./meldinga-data.js"></script>
+  <script src="./live-wind-data.js"></script>
+  <script src="./noaa-forecast-data.js"></script>
+  <script src="./meldinga.js"></script>
+</body>
+</html>
