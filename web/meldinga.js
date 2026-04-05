@@ -1,5 +1,5 @@
 const MELDINGA_DATA = window.MELDINGA_DATA || { spots: {} };
-const LIVE_WIND_DATA = window.LIVE_WIND_DATA || { sources: {}, instantSources: {} };
+const LIVE_WIND_DATA = window.LIVE_WIND_DATA || { sources: {}, instantSources: {}, observationSpots: {} };
 const NOAA_FORECAST_DATA = window.NOAA_FORECAST_DATA || { spots: {} };
 const TIDE_DATA = window.TIDE_DATA || { spots: {} };
 const FORECAST_DATA = Object.keys(MELDINGA_DATA.spots || {}).length ? MELDINGA_DATA : NOAA_FORECAST_DATA;
@@ -41,21 +41,7 @@ const DETAIL_TIDE_GRAPH = {
   dayFill: "#FFFFFF",
 };
 
-const OBSERVATION_LAYOUT_CONFIG = {
-  "Lista": [
-    { name: "Lista Fyr", sourceName: "Lista Fyr" },
-    { name: "Søndre Katland", placeholder: true },
-  ],
-  "Pigsty/Piggy": [
-    { name: "Obrestad Fyr", sourceName: "Obrestad Fyr" },
-    { name: "Vigdel", sourceName: "Vigdel" },
-    { name: "Sola", placeholder: true },
-    { name: "Eigerøya", placeholder: true },
-    { name: "Kvitsøy - Nordbø", placeholder: true },
-    { name: "Hemnes", placeholder: true },
-    { name: "Utsira Fyr", placeholder: true },
-  ],
-};
+const OBSERVATION_LAYOUT_CONFIG = {};
 
 const DETAIL_TIDE_LABEL_LAYOUT = {
   curveTopInset: 50,
@@ -755,6 +741,12 @@ function liveWindSeriesSourceEntries() {
 function liveWindInstantSourceEntries() {
   const sourceMap = LIVE_WIND_DATA?.instantSources || {};
   return Object.values(sourceMap);
+}
+
+function liveWindObservationSourcesForSpot(spotName) {
+  const observationSpots = LIVE_WIND_DATA?.observationSpots || {};
+  const sources = observationSpots[spotName];
+  return Array.isArray(sources) ? sources : [];
 }
 
 function sortObservationSources(left, right) {
@@ -2160,6 +2152,11 @@ function latestObservationSourcesForSpot(spotName) {
 }
 
 function observationDisplaySourcesForSpot(spotName) {
+  const mergedSources = liveWindObservationSourcesForSpot(spotName);
+  if (mergedSources.length) {
+    return mergedSources;
+  }
+
   const configured = OBSERVATION_LAYOUT_CONFIG[spotName];
   const actualSources = [
     ...liveWindSeriesSourcesForSpot(spotName),
@@ -2188,6 +2185,10 @@ function observationDisplaySourcesForSpot(spotName) {
 }
 
 function observationTableRows(source) {
+  if (Array.isArray(source?.rows) && source?.providerLabel) {
+    return source.rows;
+  }
+
   const seriesRows = observationRowsForDisplay(source);
   if (seriesRows.length) {
     return seriesRows;
@@ -2212,6 +2213,7 @@ function observationTableRows(source) {
 
 function renderObservationSeriesBlock(source) {
   const rows = observationTableRows(source);
+  const meta = source?.providerLabel || "";
   const labels = [
     renderLabelCell("Tid", "forecast-label--time"),
     renderLabelCell("Vind m/s", "forecast-label--center"),
@@ -2235,6 +2237,7 @@ function renderObservationSeriesBlock(source) {
     `<section class="detail-observation-series-card">` +
     `<div class="detail-observation-series-head">` +
     `<h3 class="detail-observation-series-title">${escapeHtml(source?.name || "Ukjent stasjon")}</h3>` +
+    (meta ? `<div class="detail-observation-series-meta">${escapeHtml(meta)}</div>` : "") +
     `</div>` +
     `<div class="detail-observation-table-scroll">` +
     `<div class="detail-observation-table">` +
