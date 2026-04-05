@@ -1900,7 +1900,7 @@ function renderLightSideInfo(spotName, dateLocal) {
     `<div class="detail-light-stack">` +
     `<div class="detail-side-line">` +
     `<span class="detail-side-label">Første/siste lys:</span>` +
-    `<span class="detail-side-copy"><span class="detail-side-emphasis">${escapeHtml(lightWindow.firstLightLocal)} / ${escapeHtml(lightWindow.lastLightLocal)}</span></span>` +
+    `<span class="detail-side-copy"><span class="detail-side-emphasis">${escapeHtml(lightWindow.firstLightLocal)}</span> / <span class="detail-side-emphasis">${escapeHtml(lightWindow.lastLightLocal)}</span></span>` +
     (adjustedSuffix ? `<span class="detail-side-note">${escapeHtml(adjustedSuffix)}</span>` : "") +
     `</div>` +
     `</div>`
@@ -1913,7 +1913,7 @@ function renderSeaTemperatureInfo(spotName) {
     return (
       `<div class="detail-sea-line">` +
       `<span class="detail-side-label">Sjøtemp:</span>` +
-      `<span class="detail-sea-copy">Ingen målt sjøtemperatur tilgjengelig akkurat nå.</span>` +
+      `<span class="detail-sea-copy">Måling mangler</span>` +
       `</div>`
     );
   }
